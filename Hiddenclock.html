@@ -37,7 +37,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 14px 14px 40px;
+            padding: 14px 14px env(safe-area-inset-bottom, 40px);
             overflow-x: hidden;
         }
 
@@ -70,11 +70,12 @@
         }
 
         .tabs-container {
-            width: 100%; max-width: 500px; overflow-x: auto;
-            margin-bottom: 12px; padding-bottom: 4px; scrollbar-width: none;
+            width: 100%; max-width: 500px; overflow-x: auto; overflow-y: visible;
+            margin-bottom: 12px; padding: 4px 0 8px; scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
         }
         .tabs-container::-webkit-scrollbar { display: none; }
-        .tabs { display: flex; gap: 6px; width: max-content; transition: opacity 0.3s; }
+        .tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; transition: opacity 0.3s; }
         .tabs.hidden-play { opacity: 0; pointer-events: none; height: 0; overflow: hidden; margin: 0; }
         .tab-btn {
             background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border);
@@ -183,7 +184,7 @@
         .player-btn.done { border-color: var(--text-dim); background: var(--bg); }
         .player-btn.cooldown::after {
             content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.08));
-            animation: cooldownSwipe 1.5s linear forwards;
+            animation: cooldownSwipe 0.3s linear forwards;
         }
         @keyframes cooldownSwipe { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
         .pb-name { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; z-index: 2; pointer-events: none; }
@@ -210,8 +211,23 @@
             display: inline-flex; align-items: center; justify-content: center; gap: 8px;
         }
         .btn:active { transform: scale(0.96); }
-        .btn-primary { background: var(--p1); color: #000; }
-        .btn-primary:hover { box-shadow: 0 0 20px var(--p1-dim); }
+        .btn-primary {
+            background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(167,139,250,0.15));
+            border: 1px solid var(--p1);
+            color: var(--p1);
+            padding: 12px 32px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            border-radius: 10px;
+            backdrop-filter: blur(8px);
+            transition: all 0.25s ease;
+        }
+        .btn-primary:hover, .btn-primary:active {
+            background: linear-gradient(135deg, rgba(0,212,255,0.3), rgba(167,139,250,0.3));
+            box-shadow: 0 0 20px var(--p1-dim);
+            transform: translateY(-1px);
+        }
         .btn-danger { background: var(--danger); color: #fff; }
         .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
         .btn-text { background: transparent; border: 0; color: var(--text-dim); padding: 0; font-size: 0.85rem; cursor: pointer; }
@@ -394,12 +410,12 @@
 
     <script>
     const ICONS = {
-        timer: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7"></circle><path d="M12 13V9"></path><path d="M12 13l3 2"></path><path d="M9 2h6"></path><path d="M16.5 5.5l1.5-1.5"></path></svg>`,
-        gear: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"></circle><path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6Z"></path></svg>`,
-        speaker: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 14h4l5 4V6l-5 4H5z"></path><path d="M17 9a5 5 0 0 1 0 6"></path><path d="M19.5 6.5a8.5 8.5 0 0 1 0 11"></path></svg>`,
-        haptic: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="3" width="8" height="18" rx="2"></rect><path d="M11 18h2"></path><path d="M4 9c-1.3 1.3-1.3 4.7 0 6"></path><path d="M20 9c1.3 1.3 1.3 4.7 0 6"></path></svg>`,
-        trophy: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3a4 4 0 0 1-8 0V4Z"></path><path d="M6 5H4a2 2 0 0 0 2 5"></path><path d="M18 5h2a2 2 0 0 1-2 5"></path><path d="M12 11v4"></path><path d="M8 21h8"></path><path d="M9.5 15h5"></path></svg>`,
-        play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l10 6-10 6z" fill="currentColor" stroke="none"></path></svg>`
+        timer: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="14" r="8" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="M12 14V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M12 6V4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M9 2h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M18.5 7l1-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`,
+        gear: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" fill="none" stroke="currentColor" stroke-width="1.5"></path><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"></circle></svg>`,
+        speaker: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`,
+        haptic: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"></rect><path d="M11 18h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M3 8c-1 1.5-1 5.5 0 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M21 8c1 1.5 1 5.5 0 7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`,
+        trophy: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18 9h3a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M6 5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4a6 6 0 0 1-12 0V5z" fill="none" stroke="currentColor" stroke-width="1.5"></path><path d="M12 15v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M8 21h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path><path d="M10 18h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg>`,
+        play: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4l14 8-14 8V4z" fill="currentColor" stroke="none"></path></svg>`
     };
 
     const COLORS = ['--p1', '--p2', '--p3', '--p4', '--p5'];
@@ -434,11 +450,11 @@
         },
         4: {
             n: 'Bomb', short: 'Bomb',
-            desc: 'The bomb chooses a random fuse and explodes on whoever is holding it. Survive, pass often, and your payout climbs.',
+            desc: 'Hot potato! The bomb has a hidden fuse — pass it to the next player before it blows. Whoever is holding it when it explodes loses!',
             config: `
                 <div class="config-item"><label>Fuse Min (s)</label><input type="number" id="m4-min" value="10" min="3" max="60" step="1"></div>
                 <div class="config-item"><label>Fuse Max (s)</label><input type="number" id="m4-max" value="25" min="4" max="90" step="1"></div>
-                <div class="config-note">Passing grants survivors bonus points: 300 + 100 per pass, capped at 800.</div>`
+                <div class="config-note">Pass fast! Fuse is hidden. Last one holding it loses.</div>`
         },
         5: {
             n: 'Zenith', short: 'Zenith',
@@ -449,23 +465,31 @@
         },
         6: {
             n: 'Echo', short: 'Echo',
-            desc: 'First, memorize a visible duration. After a short reset countdown, recreate that exact timing from memory.',
+            desc: 'Listen to a duration marked by start and end beeps, then recreate it from memory. All players must confirm ready before the replication phase begins.',
             config: `<div class="config-note">Random memorize window: 2 to 6 seconds.</div>`
         },
         7: {
             n: 'Blind Countdown', short: 'Blind',
             desc: 'A countdown starts visible, then vanishes partway through. Tap when you believe it has reached absolute zero.',
-            config: `<div class="config-note">Random visible countdown: 5 to 15 seconds, hidden after 30%–70%.</div>`
+            config: `
+                <div class="config-item"><label>Countdown Min (s)</label><input type="number" id="m7-min" value="5" min="1" max="60" step="1"></div>
+                <div class="config-item"><label>Countdown Max (s)</label><input type="number" id="m7-max" value="15" min="2" max="90" step="1"></div>
+                <div class="config-item"><label>Hide After (%)</label><input type="number" id="m7-hide" value="50" min="10" max="90" step="5"></div>
+                <div class="config-note">Timer hides after the specified percentage of the countdown has elapsed.</div>`
         },
         8: {
             n: 'Duel', short: 'Duel',
-            desc: 'One pair faces the same hidden stop point. The closer player wins the duel for 700 points while the other still banks 300.',
-            config: `<div class="config-note">Random duel target: 3 to 8 seconds. Solo players face a ghost. Groups rotate pairs each round.</div>`
+            desc: 'All players race against the same hidden target. Tap when you think the time is right — closest to the target wins the most points!',
+            config: `
+                <div class="config-item"><label>Target Min (s)</label><input type="number" id="m8-min" value="3" min="1" max="30" step="0.5"></div>
+                <div class="config-item"><label>Target Max (s)</label><input type="number" id="m8-max" value="8" min="1" max="30" step="0.5"></div>`
         },
         9: {
-            n: 'Split Second', short: 'Split',
-            desc: 'Ultra-short hidden targets create frantic rapid-fire rounds. Best played over several rounds for a comeback race.',
-            config: `<div class="config-note">Random target: 0.5 to 2.0 seconds.</div>`
+            n: 'Reflex', short: 'Reflex',
+            desc: 'A visible countdown appears — tap the INSTANT it hits zero! Pure reaction speed. Fastest accurate tap wins.',
+            config: `
+                <div class="config-item"><label>Countdown (s)</label><input type="number" id="m9-cd" value="3" min="1" max="10" step="0.5"></div>
+                <div class="config-note">A countdown runs visibly. Tap as close to 0.000 as possible!</div>`
         }
     };
 
@@ -515,7 +539,14 @@
     }
     function liveDisplay(step) {
         if (rafHandle) cancelAnimationFrame(rafHandle);
-        const tick = () => { step(); rafHandle = requestAnimationFrame(tick); };
+        const tick = () => {
+            const keepGoing = step();
+            if (keepGoing === false) {
+                rafHandle = 0;
+                return;
+            }
+            rafHandle = requestAnimationFrame(tick);
+        };
         tick();
     }
 
@@ -756,13 +787,24 @@
             const p = players.find(player => player.id === id);
             if (!p) return;
             arena.innerHTML += `
-                <button class="player-btn" data-pid="${p.id}" id="btn-p${p.id}" style="color:var(${p.var})" onclick="arenaTap(${p.id}, event)">
+                <button class="player-btn" data-pid="${p.id}" id="btn-p${p.id}" style="color:var(${p.var})">
                     <span class="pb-name">${safe(p.name)}</span>
                     <span class="pb-stat" id="stat-p${p.id}">${safe(statFn(p))}</span>
                     <span class="pb-sub" id="sub-p${p.id}">${safe(subtitleFn(p))}</span>
                 </button>`;
         });
+        attachArenaListeners();
         arena.classList.toggle('hidden', ids.length === 0);
+    }
+
+    function attachArenaListeners() {
+        arena.querySelectorAll('.player-btn').forEach(btn => {
+            btn.addEventListener('pointerdown', function(e) {
+                e.preventDefault();
+                const pId = Number(this.dataset.pid);
+                arenaTap(pId, e);
+            }, { passive: false });
+        });
     }
 
     function showToast(text, color = '') {
@@ -879,15 +921,22 @@
             display.textContent = '??.???';
             const [minS, maxS] = sanitizeRange('m1-min', 'm1-max', { min: 3, max: 8 });
             modeData.target = rand(minS * 1000, maxS * 1000);
+            modeData.stopped = false;
             showToast('Clock is running... invisibly!');
-            addTimeout(() => {
-                modeData.actual = performance.now() - startTime;
-                gs = STATE.GUESSING;
-                snd('tick');
-                modeData.pIndex = 0;
-                modeData.guesses = {};
-                guessNext();
-            }, modeData.target);
+            liveDisplay(() => {
+                const elapsed = performance.now() - startTime;
+                if (elapsed >= modeData.target && !modeData.stopped) {
+                    modeData.stopped = true;
+                    modeData.actual = elapsed;
+                    clearTimers();
+                    gs = STATE.GUESSING;
+                    snd('tick');
+                    modeData.pIndex = 0;
+                    modeData.guesses = {};
+                    guessNext();
+                    return false;
+                }
+            });
             return;
         }
 
@@ -936,15 +985,18 @@
             modeData.locked = null;
             display.className = 'stopwatch-display danger';
             display.textContent = 'BOMB';
-            renderArena(ids, p => `Pass on ${KEYS[p.id - 1].toUpperCase()}`, () => 'HOLD');
-            showToast('Pass it fast. New holders are locked for 1.5s.', 'var(--danger)');
+            renderArena(ids, p => `Pass to next • ${KEYS[p.id - 1].toUpperCase()}`, () => 'PASS');
+            showToast('Hot potato! Fuse is hidden — pass before it blows.', 'var(--danger)');
             bombSetTurn(true);
             updateKbHint();
-            addInterval(() => {
-                const remaining = Math.max(0, modeData.fuse - (performance.now() - startTime));
-                display.textContent = remaining > 0 ? `${remaining / 1000 < 10 ? '0' : ''}${(remaining / 1000).toFixed(1)}` : 'BOOM';
-                if (remaining <= 0) bombExplode();
-            }, 50);
+            liveDisplay(() => {
+                display.textContent = performance.now() < (modeData.passFlashUntil || 0) ? '🔥 PASS!' : 'BOMB';
+                const elapsed = performance.now() - startTime;
+                if (elapsed >= modeData.fuse) {
+                    bombExplode();
+                    return false;
+                }
+            });
             return;
         }
 
@@ -965,24 +1017,30 @@
             modeData.phase = 1;
             modeData.target = rand(2000, 6000);
             display.className = 'stopwatch-display running';
-            showToast('Memorize this timing.');
-            liveDisplay(() => {
-                const elapsed = performance.now() - startTime;
-                display.textContent = fmt(Math.min(elapsed, modeData.target));
-            });
+            display.textContent = 'LISTEN...';
+            showToast('Memorize this duration (start beep → end beep)');
+            snd('go'); hap([30]);
             addTimeout(() => {
-                clearTimers();
-                display.className = 'stopwatch-display';
-                display.textContent = fmt(modeData.target);
                 snd('bad'); hap([40, 40, 40]);
-                startEchoReadyCountdown();
+                display.className = 'stopwatch-display';
+                display.textContent = 'READY?';
+                showToast('All players: tap your button when ready');
+                modeData.phase = 'ready';
+                modeData.readyPlayers = {};
+                modeData.readyCount = 0;
+                renderArena(realActivePlayers().map(p => p.id), p => `Tap when ready`, () => 'NOT READY');
+                arena.classList.remove('hidden');
+                updateKbHint();
             }, modeData.target);
             return;
         }
 
         if (currentMode === 7) {
-            modeData.target = rand(5000, 15000);
-            modeData.hideAt = modeData.target * rand(0.3, 0.7);
+            const [minS, maxS] = sanitizeRange('m7-min', 'm7-max', { min: 5, max: 15 });
+            modeData.target = rand(minS * 1000, maxS * 1000);
+            const hideInput = parseInt(el('m7-hide')?.value ?? 50, 10);
+            const hidePercent = clamp(Number.isNaN(hideInput) ? 50 : hideInput, 10, 90) / 100;
+            modeData.hideAt = modeData.target * hidePercent;
             modeData.hidden = false;
             modeData.hits = {};
             modeData.done = 0;
@@ -1010,40 +1068,37 @@
         }
 
         if (currentMode === 8) {
-            const actives = realActivePlayers();
-            modeData.target = rand(3000, 8000);
-            modeData.hits = {};
-            modeData.duelIds = [];
-            display.textContent = '??.???';
-            display.className = 'stopwatch-display hidden-timer';
-            if (actives.length === 1) {
-                const solo = actives[0];
-                modeData.duelIds = [solo.id];
-                modeData.ghostHit = modeData.target + rand(-900, 900);
-                renderArena(modeData.duelIds, p => `${p.name} vs Ghost`, () => 'READY');
-                showToast(`${solo.name} vs Ghost — target armed.`);
-            } else {
-                const idx = (currentRound - 1) % actives.length;
-                const pair = [actives[idx], actives[(idx + 1) % actives.length]];
-                modeData.duelIds = pair.map(p => p.id);
-                renderArena(modeData.duelIds, p => `${p.name} | ${KEYS[p.id - 1].toUpperCase()}`, () => 'DUEL');
-                showToast(`${pair[0].name} vs ${pair[1].name}`);
-            }
-            updateKbHint();
-            addTimeout(endRound, modeData.target + 3500);
-            return;
-        }
-
-        if (currentMode === 9) {
-            modeData.target = rand(500, 2000);
+            const [minS, maxS] = sanitizeRange('m8-min', 'm8-max', { min: 3, max: 8 });
+            modeData.target = rand(minS * 1000, maxS * 1000);
             modeData.hits = {};
             modeData.done = 0;
             display.textContent = '??.???';
             display.className = 'stopwatch-display hidden-timer';
-            showToast(`Split Second target locked.`);
+            showToast('Tap closest to the hidden target!');
             renderArena(ids);
             updateKbHint();
-            addTimeout(endRound, modeData.target + 2500);
+            addTimeout(endRound, maxS * 1000 + 4500);
+            return;
+        }
+
+        if (currentMode === 9) {
+            const cdTime = (parseFloat(el('m9-cd')?.value) || 3) * 1000;
+            modeData.target = cdTime;
+            modeData.hits = {};
+            modeData.done = 0;
+            display.className = 'stopwatch-display running';
+            showToast('Tap the moment it hits zero!');
+            renderArena(ids);
+            updateKbHint();
+            liveDisplay(() => {
+                const elapsed = performance.now() - startTime;
+                const remaining = Math.max(0, cdTime - elapsed);
+                display.textContent = fmt(remaining);
+                if (remaining <= 0) {
+                    display.textContent = '00.000';
+                }
+            });
+            addTimeout(endRound, cdTime + 3000);
         }
     }
 
@@ -1073,6 +1128,7 @@
     }
 
     function precisionHit(pId) {
+        if (modeData.hits?.[pId] != null) return;
         const elapsed = performance.now() - startTime;
         modeData.hits[pId] = elapsed;
         const btn = el(`btn-p${pId}`);
@@ -1083,7 +1139,23 @@
     }
 
     function zenithHit(pId) { precisionHit(pId); }
-    function echoHit(pId) { if (modeData.phase === 2) precisionHit(pId); }
+    function echoHit(pId) {
+        if (modeData.phase === 'ready') {
+            if (modeData.readyPlayers[pId]) return;
+            modeData.readyPlayers[pId] = true;
+            modeData.readyCount += 1;
+            const btn = el(`btn-p${pId}`);
+            btn.classList.add('done');
+            el(`stat-p${pId}`).textContent = 'READY';
+            snd('tick');
+            if (modeData.readyCount >= realActivePlayers().length) {
+                modeData.phase = 'countdown';
+                startEchoReadyCountdown();
+            }
+            return;
+        }
+        if (modeData.phase === 2) precisionHit(pId);
+    }
     function blindHit(pId) { precisionHit(pId); }
     function splitHit(pId) { precisionHit(pId); }
 
@@ -1136,8 +1208,8 @@
             btn.classList.remove('active', 'cooldown');
             btn.style.borderColor = '';
             btn.disabled = id !== holderId;
-            el(`stat-p${id}`).textContent = modeData.passCounts[id] ? `${modeData.passCounts[id]} pass` + (modeData.passCounts[id] === 1 ? '' : 'es') : 'HOLD';
-            el(`sub-p${id}`).textContent = id === holderId ? 'Receiving...' : `Ready for ${KEYS[id - 1].toUpperCase()}`;
+            el(`stat-p${id}`).textContent = modeData.passCounts[id] ? `${modeData.passCounts[id]} pass` + (modeData.passCounts[id] === 1 ? '' : 'es') : 'PASS';
+            el(`sub-p${id}`).textContent = id === holderId ? 'Incoming...' : `Ready for ${KEYS[id - 1].toUpperCase()}`;
         });
         const holderBtn = el(`btn-p${holderId}`);
         holderBtn.style.borderColor = 'var(--danger)';
@@ -1145,7 +1217,8 @@
         holderBtn.disabled = true;
         holderBtn.classList.add('cooldown');
         modeData.locked = holderId;
-        el(`sub-p${holderId}`).textContent = initial ? 'Live in 1.5s' : 'Pass locked 1.5s';
+        el(`stat-p${holderId}`).textContent = 'BOMB';
+        el(`sub-p${holderId}`).textContent = initial ? 'Live in 0.3s' : 'Pass locked 0.3s';
         addTimeout(() => {
             if (gs !== STATE.RUNNING || currentMode !== 4) return;
             const latestHolder = modeData.alive[modeData.holderIdx];
@@ -1154,14 +1227,17 @@
             latestBtn.disabled = false;
             latestBtn.classList.remove('cooldown');
             latestBtn.classList.add('active');
-            el(`sub-p${latestHolder}`).textContent = `Tap or ${KEYS[latestHolder - 1].toUpperCase()}`;
-        }, 1500);
+            el(`stat-p${latestHolder}`).textContent = 'BOMB';
+            el(`sub-p${latestHolder}`).textContent = `Pass now • ${KEYS[latestHolder - 1].toUpperCase()}`;
+        }, 300);
     }
 
     function bombHit(pId) {
         const holderId = modeData.alive[modeData.holderIdx];
         if (pId !== holderId) return;
         modeData.passCounts[pId] += 1;
+        modeData.passFlashUntil = performance.now() + 180;
+        display.textContent = '🔥 PASS!';
         modeData.holderIdx = (modeData.holderIdx + 1) % modeData.alive.length;
         snd('tick');
         bombSetTurn();
@@ -1204,20 +1280,14 @@
         startTime = performance.now();
         display.className = 'stopwatch-display hidden-timer';
         display.textContent = '??.???';
-        showToast(`Recreate ${fmt(modeData.target)}s from memory.`);
+        showToast('Recreate the memorized duration.');
         renderArena(realActivePlayers().map(p => p.id));
         updateKbHint();
         addTimeout(endRound, modeData.target + 5000);
     }
 
     function duelHit(pId) {
-        const elapsed = performance.now() - startTime;
-        modeData.hits[pId] = elapsed;
-        const btn = el(`btn-p${pId}`);
-        btn.disabled = true; btn.classList.add('done');
-        el(`stat-p${pId}`).textContent = fmt(elapsed);
-        const targetCount = modeData.duelIds.length;
-        if (Object.keys(modeData.hits).length >= targetCount) addTimeout(endRound, 300);
+        precisionHit(pId);
     }
 
     function setModalState(id, open) {
@@ -1286,7 +1356,7 @@
             return showEndScreen(html);
         }
 
-        if (currentMode === 2 || currentMode === 5 || currentMode === 6 || currentMode === 7 || currentMode === 9) {
+        if (currentMode === 2 || currentMode === 5 || currentMode === 6 || currentMode === 7 || currentMode === 8 || currentMode === 9) {
             const target = modeData.target;
             display.className = 'stopwatch-display';
             display.textContent = fmt(target);
@@ -1295,7 +1365,8 @@
                 5: 'Target',
                 6: 'Echo target',
                 7: 'Zero point',
-                9: 'Split target'
+                8: 'Duel target',
+                9: 'Countdown'
             };
             html = `<div style="margin-bottom:10px;color:var(--text-dim)">${titleMap[currentMode]}: <strong>${fmt(target)}s</strong></div><div class="result-grid">`;
             realActivePlayers().forEach(p => {
@@ -1331,63 +1402,6 @@
                         <div class="res-pts">+${pts}</div>
                     </div>`;
             });
-            html += `</div>`;
-            return showEndScreen(html);
-        }
-
-        if (currentMode === 8) {
-            display.className = 'stopwatch-display';
-            display.textContent = fmt(modeData.target);
-            const duelPlayers = modeData.duelIds.map(id => players.find(p => p.id === id));
-            const rows = [];
-            if (modeData.duelIds.length === 1) {
-                const p = duelPlayers[0];
-                const playerHit = modeData.hits[p.id];
-                const playerDiff = playerHit == null ? Infinity : Math.abs(modeData.target - playerHit);
-                const ghostDiff = Math.abs(modeData.target - modeData.ghostHit);
-                const playerPts = playerDiff < ghostDiff ? 700 : playerDiff > ghostDiff ? 300 : 500;
-                p.score += playerPts;
-                html = `<div style="margin-bottom:10px;color:var(--text-dim)">${safe(p.name)} vs Ghost • Target <strong>${fmt(modeData.target)}s</strong></div><div class="result-grid">`;
-                rows.push(`
-                    <div class="res-card">
-                        <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
-                        <div class="res-val">${playerHit == null ? '--' : `${fmt(playerHit)}s`}</div>
-                        <div class="res-note">${playerHit == null ? 'No tap recorded' : `Diff ${fmt(playerDiff)}s`}</div>
-                        <div class="res-pts" style="color:${playerPts === 700 ? 'var(--warn)' : 'var(--p1)'}">${playerPts === 700 ? 'WIN' : playerPts === 500 ? 'TIE' : 'LOSS'} (+${playerPts})</div>
-                    </div>`);
-                rows.push(`
-                    <div class="res-card">
-                        <div class="res-name" style="color:var(--text-dim)">Ghost</div>
-                        <div class="res-val">${fmt(modeData.ghostHit)}s</div>
-                        <div class="res-note">Diff ${fmt(ghostDiff)}s</div>
-                        <div class="res-pts" style="color:${playerPts === 700 ? 'var(--text-dim)' : 'var(--warn)'}">${playerPts === 700 ? 'LOSS' : playerPts === 500 ? 'TIE' : 'WIN'}</div>
-                    </div>`);
-                html += rows.join('') + `</div>`;
-                return showEndScreen(html);
-            }
-
-            const d1 = duelPlayers[0], d2 = duelPlayers[1];
-            const hit1 = modeData.hits[d1.id], hit2 = modeData.hits[d2.id];
-            const diff1 = hit1 == null ? Infinity : Math.abs(modeData.target - hit1);
-            const diff2 = hit2 == null ? Infinity : Math.abs(modeData.target - hit2);
-            let pts1 = 500, pts2 = 500, label1 = 'TIE', label2 = 'TIE';
-            if (diff1 < diff2) { pts1 = 700; pts2 = 300; label1 = 'WIN'; label2 = 'LOSS'; }
-            else if (diff2 < diff1) { pts1 = 300; pts2 = 700; label1 = 'LOSS'; label2 = 'WIN'; }
-            d1.score += pts1; d2.score += pts2;
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">${safe(d1.name)} vs ${safe(d2.name)} • Target <strong>${fmt(modeData.target)}s</strong></div><div class="result-grid">`;
-            html += `
-                <div class="res-card">
-                    <div class="res-name" style="color:var(${d1.var})">${safe(d1.name)}</div>
-                    <div class="res-val">${hit1 == null ? '--' : `${fmt(hit1)}s`}</div>
-                    <div class="res-note">${hit1 == null ? 'No tap recorded' : `Diff ${fmt(diff1)}s`}</div>
-                    <div class="res-pts" style="color:${pts1 === 700 ? 'var(--warn)' : 'var(--p1)'}">${label1} (+${pts1})</div>
-                </div>
-                <div class="res-card">
-                    <div class="res-name" style="color:var(${d2.var})">${safe(d2.name)}</div>
-                    <div class="res-val">${hit2 == null ? '--' : `${fmt(hit2)}s`}</div>
-                    <div class="res-note">${hit2 == null ? 'No tap recorded' : `Diff ${fmt(diff2)}s`}</div>
-                    <div class="res-pts" style="color:${pts2 === 700 ? 'var(--warn)' : 'var(--p1)'}">${label2} (+${pts2})</div>
-                </div>`;
             html += `</div>`;
             return showEndScreen(html);
         }
