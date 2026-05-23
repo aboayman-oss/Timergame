@@ -497,11 +497,16 @@
         },
         4: {
             n: 'Bomb', short: 'Bomb',
-            desc: 'Hot potato! The bomb has a hidden fuse — pass it to the next player before it blows. Whoever is holding it when it explodes loses!',
+            desc: 'Hot potato! The bomb has a hidden fuse — hold it for the minimum time, then pass before it blows. Hold longer for bonus points!',
             config: `
                 <div class="config-item"><label>Fuse Min (s)</label><input type="number" id="m4-min" value="10" min="3" max="60" step="1"></div>
                 <div class="config-item"><label>Fuse Max (s)</label><input type="number" id="m4-max" value="25" min="4" max="90" step="1"></div>
-                <div class="config-note">Pass fast! Fuse is hidden. Last one holding it loses.</div>`
+                <div class="config-item"><label>Min Hold (s)</label><input type="number" id="m4-hold" value="2.0" min="0.5" max="5.0" step="0.1"></div>
+                <div class="config-item config-full">
+                    <label>Risk Bonus</label>
+                    <div class="config-toggle"><span>Bonus for holding longer</span><label class="toggle"><input type="checkbox" id="m4-risk" checked><span class="toggle-track"></span></label></div>
+                </div>
+                <div class="config-note">Hold the bomb for the minimum time before passing. Hold longer for risk bonus points!</div>`
         },
         5: {
             n: 'Cliff', short: 'Cliff',
@@ -1102,16 +1107,37 @@
             modeData.holderIdx = Math.floor(Math.random() * modeData.alive.length);
             modeData.passCounts = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.locked = null;
+            modeData.minHold = (parseFloat(el('m4-hold')?.value) || 2.0) * 1000;
+            modeData.riskBonus = el('m4-risk')?.checked !== false;
+            modeData.holdStart = performance.now();
+            modeData.riskTime = Object.fromEntries(ids.map(id => [id, 0]));
+            modeData.holdUnlocked = false;
             display.className = 'stopwatch-display danger';
             display.textContent = 'BOMB';
             renderArena(ids, p => `Pass to ${KEYS[p.id - 1].toUpperCase()}`, () => 'PASS');
-            showToast('Hot potato! Tap ANY other player to pass the bomb!', 'var(--danger)');
+            showToast(`Hold the bomb for ${(modeData.minHold / 1000).toFixed(1)}s before you can pass!`, 'var(--danger)');
             bombSetTurn(true);
             updateKbHint();
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
                 const pct = elapsed / modeData.fuse;
-                display.textContent = performance.now() < (modeData.passFlashUntil || 0) ? '🔥 PASS!' : 'BOMB';
+                const now = performance.now();
+                const holdElapsed = now - modeData.holdStart;
+                const holdRemaining = Math.max(0, modeData.minHold - holdElapsed);
+
+                if (now < (modeData.passFlashUntil || 0)) {
+                    display.textContent = '🔥 PASS!';
+                } else if (holdRemaining > 0) {
+                    display.textContent = `HOLD ${(holdRemaining / 1000).toFixed(1)}s`;
+                } else {
+                    display.textContent = '💣 PASS!';
+                }
+
+                if (holdRemaining <= 0 && !modeData.holdUnlocked) {
+                    modeData.holdUnlocked = true;
+                    bombUnlockPass();
+                }
+
                 const gc = el('game-container');
                 if (pct > 0.3) {
                     const intensity = Math.min(1, (pct - 0.3) / 0.7);
@@ -1522,6 +1548,8 @@
 
     function bombSetTurn(initial = false) {
         const holderId = modeData.alive[modeData.holderIdx];
+        modeData.holdStart = performance.now();
+        modeData.holdUnlocked = false;
         modeData.alive.forEach(id => {
             const btn = el(`btn-p${id}`);
             if (!btn) return;
@@ -1533,37 +1561,44 @@
                 btn.classList.add('active');
                 btn.classList.add('cooldown');
                 el(`stat-p${id}`).textContent = '💣 BOMB';
-                el(`sub-p${id}`).textContent = initial ? 'Live in 0.3s' : 'Locked 0.3s';
+                el(`sub-p${id}`).textContent = `Hold ${(modeData.minHold / 1000).toFixed(1)}s…`;
             } else {
                 btn.disabled = true;
                 el(`stat-p${id}`).textContent = modeData.passCounts[id] ? `${modeData.passCounts[id]} pass${modeData.passCounts[id] === 1 ? '' : 'es'}` : 'READY';
-                el(`sub-p${id}`).textContent = `Pass here • ${KEYS[id - 1].toUpperCase()}`;
+                el(`sub-p${id}`).textContent = 'Waiting…';
             }
         });
         modeData.locked = holderId;
-        addTimeout(() => {
-            if (gs !== STATE.RUNNING || currentMode !== 4) return;
-            const latestHolder = modeData.alive[modeData.holderIdx];
-            modeData.alive.forEach(id => {
-                const btn = el(`btn-p${id}`);
-                if (!btn) return;
-                if (id === latestHolder) {
-                    btn.disabled = true;
-                    btn.classList.remove('cooldown');
-                    el(`stat-p${id}`).textContent = '💣 BOMB';
-                    el(`sub-p${id}`).textContent = 'Choose target!';
-                } else {
-                    btn.disabled = false;
-                    btn.classList.add('pulse-active');
-                    el(`sub-p${id}`).textContent = `Pass here • ${KEYS[id - 1].toUpperCase()}`;
-                }
-            });
-        }, 300);
+    }
+
+    function bombUnlockPass() {
+        if (gs !== STATE.RUNNING || currentMode !== 4) return;
+        const holderId = modeData.alive[modeData.holderIdx];
+        modeData.locked = null;
+        modeData.alive.forEach(id => {
+            const btn = el(`btn-p${id}`);
+            if (!btn) return;
+            if (id === holderId) {
+                btn.disabled = true;
+                btn.classList.remove('cooldown');
+                el(`stat-p${id}`).textContent = '💣 BOMB';
+                el(`sub-p${id}`).textContent = 'PASS NOW!';
+            } else {
+                btn.disabled = false;
+                btn.classList.add('pulse-active');
+                el(`sub-p${id}`).textContent = `Pass here • ${KEYS[id - 1].toUpperCase()}`;
+            }
+        });
+        hap([30, 20, 30]);
     }
 
     function bombHit(pId) {
         const holderId = modeData.alive[modeData.holderIdx];
         if (pId === holderId) return;
+        if (!modeData.holdUnlocked) return;
+        const holdDuration = performance.now() - modeData.holdStart;
+        const extraHold = Math.max(0, holdDuration - modeData.minHold);
+        modeData.riskTime[holderId] = (modeData.riskTime[holderId] || 0) + extraHold;
         modeData.passCounts[holderId] += 1;
         modeData.passFlashUntil = performance.now() + 180;
         display.textContent = '🔥 PASS!';
@@ -1589,12 +1624,17 @@
         let html = `<div style="color:var(--danger);font-size:1.2rem;font-weight:900;margin-bottom:10px;">${safe(loser.name)} exploded!</div><div class="result-grid">`;
         realActivePlayers().forEach(p => {
             const survived = p.id !== loserId;
-            const pts = survived ? 300 + (modeData.passCounts[p.id] || 0) * 100 : 0;
+            const passes = modeData.passCounts[p.id] || 0;
+            const riskMs = modeData.riskTime[p.id] || 0;
+            const riskPts = modeData.riskBonus ? Math.round(riskMs / 10) : 0;
+            const pts = survived ? 200 + passes * 50 + riskPts : 0;
             p.score += pts;
+            const riskLabel = modeData.riskBonus && survived ? `<div style="font-size:0.7rem;opacity:0.8">Risk: ${(riskMs / 1000).toFixed(1)}s (+${riskPts})</div>` : '';
             html += `
                 <div class="res-card">
                     <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
-                    <div class="res-val">${modeData.passCounts[p.id] || 0} pass${modeData.passCounts[p.id] === 1 ? '' : 'es'}</div>
+                    <div class="res-val">${passes} pass${passes === 1 ? '' : 'es'}</div>
+                    ${riskLabel}
                     <div class="res-pts ${pts === 0 ? 'zero' : ''}">${pts > 0 ? '+' : ''}${pts}</div>
                 </div>`;
         });
