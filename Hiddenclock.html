@@ -156,6 +156,16 @@
         }
         .mode-desc p { color: var(--text-dim); font-size: 0.85rem; line-height: 1.45; }
         .config-note { grid-column: span 2; text-align: center; font-size: 0.75rem; color: var(--text-dim); }
+        .difficulty-presets { grid-column: span 2; display: flex; gap: 8px; margin-bottom: 4px; }
+        .preset-btn { flex: 1; padding: 10px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-dim); font-family: 'Exo 2', sans-serif; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: all 0.2s; text-align: center; touch-action: manipulation; }
+        .preset-btn:hover { border-color: var(--p1); color: var(--p1); }
+        .preset-btn.active { background: var(--p1-dim); border-color: var(--p1); color: var(--p1); }
+        .advanced-toggle { grid-column: span 2; display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 0; color: var(--text-dim); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; transition: color 0.2s; }
+        .advanced-toggle:hover { color: var(--p1); }
+        .advanced-toggle svg { width: 14px; height: 14px; transition: transform 0.2s; }
+        .advanced-toggle.open svg { transform: rotate(90deg); }
+        .advanced-section { grid-column: span 2; display: none; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .advanced-section.open { display: grid; }
         .config-toggle {
             display: flex; align-items: center; justify-content: space-between; gap: 12px;
             background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
@@ -471,6 +481,7 @@
     const HEX = ['#00d4ff', '#a78bfa', '#00ff87', '#ffbe00', '#ff3366'];
     const KEYS = ['a', 's', 'd', 'f', 'g'];
     const STORAGE_KEY = 'hiddenClockPrefsV2';
+    const MATCH_STATE_KEY = 'hiddenClockMatchState';
 
     const STATE = { MENU: 0, CD: 1, RUNNING: 2, GUESSING: 3, RESULT: 4, TRANSITION: 5 };
     const MODES = {
@@ -478,74 +489,205 @@
             n: 'Predict (Manual)', short: 'Manual',
             desc: 'A hidden timer runs for a secret duration. Type your guessed time into the input field and press Lock. Your guess is hidden from other players!',
             config: `
-                <div class="config-item"><label>Min (s)</label><input type="number" id="m1-min" value="3" min="1" max="30" step="0.5"></div>
-                <div class="config-item"><label>Max (s)</label><input type="number" id="m1-max" value="8" min="1" max="45" step="0.5"></div>`
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(1, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(1, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(1, 'hard')">Hard</button>
+                </div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item"><label>Min (s)</label><input type="number" id="m1-min" value="5" min="1" max="30" step="0.5"></div>
+                    <div class="config-item"><label>Max (s)</label><input type="number" id="m1-max" value="10" min="1" max="45" step="0.5"></div>
+                </div>`
         },
         2: {
             n: 'Precision', short: 'Precision',
             desc: 'Tap when you think the hidden timer reaches the target. Continuous scoring rewards every millisecond of accuracy.',
-            config: `<div class="config-item config-full"><label>Target (s)</label><input type="number" id="m2-tgt" value="5.0" step="0.5" min="0.5" max="30"></div>`
+            config: `
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(2, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(2, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(2, 'hard')">Hard</button>
+                </div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item config-full"><label>Target (s)</label><input type="number" id="m2-tgt" value="8" step="0.5" min="0.5" max="30"></div>
+                </div>`
         },
         3: {
             n: 'Relay', short: 'Relay',
             desc: 'Players take turns hitting checkpoints in sequence. Choose Individual Laps (timer resets each turn) or Master Sabotage (continuous timer where early/late taps affect the next player).',
             config: `
-                <div class="config-item config-full">
-                    <label>Variant</label>
-                    <select id="m3-variant" style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;">
-                        <option value="individual">Option A — Individual Laps (timer resets)</option>
-                        <option value="sabotage">Option B — Master Sabotage Timer</option>
-                    </select>
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(3, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(3, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(3, 'hard')">Hard</button>
                 </div>
-                <div class="config-item"><label>Target Duration (s)</label><input type="number" id="m3-int" value="2.0" step="0.1" min="0.5" max="10"></div>
-                <div class="config-item"><label>Laps</label><input type="number" id="m3-laps" value="2" min="1" max="10" step="1"></div>
-                <div class="config-item config-full">
-                    <label>Escalation</label>
-                    <div class="config-toggle"><span>Escalating intervals</span><label class="toggle"><input type="checkbox" id="m3-esc" checked><span class="toggle-track"></span></label></div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item config-full">
+                        <label>Variant</label>
+                        <select id="m3-variant" style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;">
+                            <option value="individual">Option A — Individual Laps (timer resets)</option>
+                            <option value="sabotage">Option B — Master Sabotage Timer</option>
+                        </select>
+                    </div>
+                    <div class="config-item"><label>Target Duration (s)</label><input type="number" id="m3-int" value="3" step="0.1" min="0.5" max="10"></div>
+                    <div class="config-item"><label>Laps</label><input type="number" id="m3-laps" value="2" min="1" max="10" step="1"></div>
+                    <div class="config-item config-full">
+                        <label>Escalation</label>
+                        <div class="config-toggle"><span>Escalating intervals</span><label class="toggle"><input type="checkbox" id="m3-esc" checked><span class="toggle-track"></span></label></div>
+                    </div>
                 </div>`
         },
         4: {
             n: 'Bomb', short: 'Bomb',
             desc: 'Hot potato! The bomb has a hidden fuse — hold it for the minimum time, then pass before it blows. Hold longer for bonus points, but get caught holding and you lose!',
             config: `
-                <div class="config-item"><label>Min Hold (s)</label><input type="number" id="m4-hold" value="2.0" min="0.5" max="5.0" step="0.1"></div>
-                <div class="config-item config-full">
-                    <label>Risk Bonus</label>
-                    <div class="config-toggle"><span>Bonus for holding longer</span><label class="toggle"><input type="checkbox" id="m4-risk" checked><span class="toggle-track"></span></label></div>
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(4, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(4, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(4, 'hard')">Hard</button>
                 </div>
-                <div class="config-note">Hold the bomb for the minimum time before passing. The fuse length is random and hidden!</div>`
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item"><label>Min Hold (s)</label><input type="number" id="m4-hold" value="1.0" min="0.5" max="5.0" step="0.1"></div>
+                    <div class="config-item config-full">
+                        <label>Risk Bonus</label>
+                        <div class="config-toggle"><span>Bonus for holding longer</span><label class="toggle"><input type="checkbox" id="m4-risk" checked><span class="toggle-track"></span></label></div>
+                    </div>
+                    <div class="config-note">Hold the bomb for the minimum time before passing. The fuse length is random and hidden!</div>
+                </div>`
         },
         5: {
             n: 'Cliff', short: 'Cliff',
             desc: 'Tap as close to the target as possible without going over. Cross the line and you bust for zero — don\'t fall off the cliff!',
             config: `
-                <div class="config-item config-full"><label>Target (s)</label><input type="number" id="m5-tgt" value="10.0" step="0.5" min="1" max="30"></div>
-                <div class="config-note" style="color:var(--danger)">Going late busts the attempt instantly.</div>`
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(5, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(5, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(5, 'hard')">Hard</button>
+                </div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item config-full"><label>Target (s)</label><input type="number" id="m5-tgt" value="15" step="0.5" min="1" max="30"></div>
+                    <div class="config-note" style="color:var(--danger)">Going late busts the attempt instantly.</div>
+                </div>`
         },
         6: {
             n: 'Predict (Tap)', short: 'Predict',
             desc: 'A hidden timer runs for a secret duration, then stops. A counter starts — tap when you think it matches the hidden time!',
             config: `
-                <div class="config-item"><label>Min (s)</label><input type="number" id="m6-min" value="3" min="1" max="30" step="0.5"></div>
-                <div class="config-item"><label>Max (s)</label><input type="number" id="m6-max" value="8" min="1" max="45" step="0.5"></div>`
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(6, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(6, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(6, 'hard')">Hard</button>
+                </div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item"><label>Min (s)</label><input type="number" id="m6-min" value="5" min="1" max="30" step="0.5"></div>
+                    <div class="config-item"><label>Max (s)</label><input type="number" id="m6-max" value="10" min="1" max="45" step="0.5"></div>
+                </div>`
         },
         7: {
             n: 'Blind Countdown', short: 'Blind',
             desc: 'A countdown starts visible, then vanishes partway through. Tap when you believe it has reached absolute zero.',
             config: `
-                <div class="config-item"><label>Countdown Min (s)</label><input type="number" id="m7-min" value="5" min="1" max="60" step="1"></div>
-                <div class="config-item"><label>Countdown Max (s)</label><input type="number" id="m7-max" value="15" min="2" max="90" step="1"></div>
-                <div class="config-item"><label>Hide After (%)</label><input type="number" id="m7-hide" value="50" min="10" max="90" step="5"></div>
-                <div class="config-note">Timer hides after the specified percentage of the countdown has elapsed.</div>`
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(7, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(7, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(7, 'hard')">Hard</button>
+                </div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item"><label>Countdown Min (s)</label><input type="number" id="m7-min" value="8" min="1" max="60" step="1"></div>
+                    <div class="config-item"><label>Countdown Max (s)</label><input type="number" id="m7-max" value="20" min="2" max="90" step="1"></div>
+                    <div class="config-item"><label>Hide After (%)</label><input type="number" id="m7-hide" value="65" min="10" max="90" step="5"></div>
+                    <div class="config-note">Timer hides after the specified percentage of the countdown has elapsed.</div>
+                </div>`
         },
         8: {
             n: 'Reflex Duel', short: 'Reflex',
             desc: 'A countdown runs then freezes. After a hidden delay the signal flashes — tap immediately! Tap before the signal = misfire. Fastest reaction wins!',
             config: `
-                <div class="config-item"><label>Countdown (s)</label><input type="number" id="m8-cd" value="3" min="1" max="10" step="0.5"></div>
-                <div class="config-item"><label>Extra Delay Min (s)</label><input type="number" id="m8-min" value="1" min="0.5" max="5" step="0.5"></div>
-                <div class="config-item"><label>Extra Delay Max (s)</label><input type="number" id="m8-max" value="3" min="1" max="8" step="0.5"></div>
-                <div class="config-note">Countdown freezes, then after a random hidden delay the signal fires. Tap early = misfire!</div>`
+                <div class="difficulty-presets">
+                    <button class="preset-btn active" data-preset="easy" onclick="applyPreset(8, 'easy')">Easy</button>
+                    <button class="preset-btn" data-preset="medium" onclick="applyPreset(8, 'medium')">Medium</button>
+                    <button class="preset-btn" data-preset="hard" onclick="applyPreset(8, 'hard')">Hard</button>
+                </div>
+                <div class="advanced-toggle" onclick="toggleAdvanced(this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    Advanced Settings
+                </div>
+                <div class="advanced-section">
+                    <div class="config-item"><label>Countdown (s)</label><input type="number" id="m8-cd" value="5" min="1" max="10" step="0.5"></div>
+                    <div class="config-item"><label>Extra Delay Min (s)</label><input type="number" id="m8-min" value="2" min="0.5" max="5" step="0.5"></div>
+                    <div class="config-item"><label>Extra Delay Max (s)</label><input type="number" id="m8-max" value="5" min="1" max="8" step="0.5"></div>
+                    <div class="config-note">Countdown freezes, then after a random hidden delay the signal fires. Tap early = misfire!</div>
+                </div>`
+        }
+    };
+    const MODE_PRESETS = {
+        1: {
+            easy: { 'm1-min': 5, 'm1-max': 10 },
+            medium: { 'm1-min': 3, 'm1-max': 8 },
+            hard: { 'm1-min': 2, 'm1-max': 5 }
+        },
+        2: {
+            easy: { 'm2-tgt': 8 },
+            medium: { 'm2-tgt': 5 },
+            hard: { 'm2-tgt': 3 }
+        },
+        3: {
+            easy: { 'm3-int': 3, 'm3-laps': 2 },
+            medium: { 'm3-int': 2, 'm3-laps': 3 },
+            hard: { 'm3-int': 1.5, 'm3-laps': 4 }
+        },
+        4: {
+            easy: { 'm4-hold': 1.0 },
+            medium: { 'm4-hold': 2.0 },
+            hard: { 'm4-hold': 3.0 }
+        },
+        5: {
+            easy: { 'm5-tgt': 15 },
+            medium: { 'm5-tgt': 10 },
+            hard: { 'm5-tgt': 5 }
+        },
+        6: {
+            easy: { 'm6-min': 5, 'm6-max': 10 },
+            medium: { 'm6-min': 3, 'm6-max': 8 },
+            hard: { 'm6-min': 2, 'm6-max': 5 }
+        },
+        7: {
+            easy: { 'm7-min': 8, 'm7-max': 20, 'm7-hide': 65 },
+            medium: { 'm7-min': 5, 'm7-max': 15, 'm7-hide': 50 },
+            hard: { 'm7-min': 3, 'm7-max': 10, 'm7-hide': 25 }
+        },
+        8: {
+            easy: { 'm8-cd': 5, 'm8-min': 2, 'm8-max': 5 },
+            medium: { 'm8-cd': 3, 'm8-min': 1, 'm8-max': 3 },
+            hard: { 'm8-cd': 2, 'm8-min': 0.5, 'm8-max': 1.5 }
         }
     };
 
@@ -713,6 +855,52 @@
             if (prefs.lastMode && MODES[prefs.lastMode]) currentMode = Number(prefs.lastMode);
         } catch (e) {}
     }
+    function saveMatchState() {
+        if (currentRound > totalRounds) {
+            clearMatchState();
+            return;
+        }
+        const payload = {
+            currentMode,
+            currentRound,
+            totalRounds,
+            playerCount,
+            scores: players.map(p => ({ id: p.id, name: p.name, score: p.score })),
+            timestamp: Date.now()
+        };
+        localStorage.setItem(MATCH_STATE_KEY, JSON.stringify(payload));
+    }
+    function clearMatchState() {
+        localStorage.removeItem(MATCH_STATE_KEY);
+    }
+    function restoreMatchState() {
+        try {
+            const raw = localStorage.getItem(MATCH_STATE_KEY);
+            if (!raw) return false;
+            const saved = JSON.parse(raw);
+            if (!saved || !MODES[saved.currentMode]) return false;
+            if ((parseInt(saved.currentRound, 10) || 1) > (parseInt(saved.totalRounds, 10) || 1)) {
+                clearMatchState();
+                return false;
+            }
+            currentMode = Number(saved.currentMode);
+            currentRound = clamp(parseInt(saved.currentRound, 10) || 1, 1, 99);
+            totalRounds = clamp(parseInt(saved.totalRounds, 10) || 3, 1, 99);
+            playerCount = clamp(parseInt(saved.playerCount, 10) || 2, 1, 5);
+            if (Array.isArray(saved.scores)) {
+                saved.scores.slice(0, 5).forEach((entry, i) => {
+                    if (!entry) return;
+                    players[i].name = String(entry.name || players[i].name).slice(0, 8);
+                    players[i].score = parseInt(entry.score, 10) || 0;
+                });
+            }
+            syncPlayerFlags();
+            return true;
+        } catch (e) {
+            clearMatchState();
+            return false;
+        }
+    }
 
     function buildStaticUi() {
         el('game-title').innerHTML = `${ICONS.timer} HIDDEN CLOCK`;
@@ -786,6 +974,25 @@
         el('round-progress').innerHTML = Array.from({ length: totalRounds }, (_, i) => `<div class="round-pip${i < done ? ' done' : ''}"></div>`).join('');
     }
 
+    function toggleAdvanced(toggleEl) {
+        const section = toggleEl?.nextElementSibling;
+        if (!section?.classList.contains('advanced-section')) return;
+        const isOpen = toggleEl.classList.toggle('open');
+        section.classList.toggle('open', isOpen);
+    }
+
+    function applyPreset(mode, preset) {
+        const values = MODE_PRESETS[mode]?.[preset];
+        if (!values) return;
+        Object.entries(values).forEach(([id, value]) => {
+            const input = el(id);
+            if (input) input.value = String(value);
+        });
+        el('config-area').querySelectorAll('.preset-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.preset === preset);
+        });
+    }
+
     function renderModeConfig() {
         const mode = MODES[currentMode];
         el('config-area').innerHTML = `
@@ -794,6 +1001,7 @@
                 <p>${safe(mode.desc)}</p>
             </div>
             ${mode.config}`;
+        applyPreset(currentMode, 'easy');
     }
 
     function updatePlayerCount() {
@@ -827,6 +1035,7 @@
     }
 
     function resetMatch() {
+        clearMatchState();
         totalRounds = parseInt(el('s-rounds').value, 10) || 3;
         currentRound = 1;
         players.forEach(p => { p.score = 0; });
@@ -1264,13 +1473,7 @@
             const [minS, maxS] = sanitizeRange('m7-min', 'm7-max', { min: 5, max: 15 });
             modeData.target = rand(minS * 1000, maxS * 1000);
             const hideInput = parseInt(el('m7-hide')?.value ?? 50, 10);
-            let hidePercent = clamp(Number.isNaN(hideInput) ? 50 : hideInput, 10, 90) / 100;
-            if (totalRounds > 1) {
-                const easyPct = 0.65;
-                const hardPct = 0.15;
-                const progress = (currentRound - 1) / (totalRounds - 1);
-                hidePercent = easyPct - progress * (easyPct - hardPct);
-            }
+            const hidePercent = clamp(Number.isNaN(hideInput) ? 50 : hideInput, 10, 90) / 100;
             modeData.hideAt = modeData.target * hidePercent;
             modeData.hidden = false;
             modeData.hits = {};
@@ -1753,6 +1956,7 @@
         arena.innerHTML = '';
         snd('good');
         currentRound += 1;
+        saveMatchState();
         renderScoreboard();
         renderProgress();
         el('main-action').style.display = 'block';
@@ -1939,15 +2143,14 @@
     function init() {
         syncPlayerFlags();
         loadPrefs();
+        const recoveredMatch = restoreMatchState();
         syncPlayerFlags();
         buildStaticUi();
         buildSettings();
         el('s-rounds').value = String(totalRounds);
         renderModeConfig();
-        renderScoreboard();
-        renderProgress();
-        updateKbHint();
-        setMode(currentMode);
+        resetUI();
+        if (recoveredMatch) showToast('Match recovered!', 'var(--success)');
     }
 
     init();
