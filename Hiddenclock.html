@@ -487,8 +487,15 @@
         },
         3: {
             n: 'Relay', short: 'Relay',
-            desc: 'Players take turns hitting checkpoints in sequence. Add more laps for endurance, or turn on escalation to make each handoff tougher.',
+            desc: 'Players take turns hitting checkpoints in sequence. Choose Individual Laps (timer resets each turn) or Master Sabotage (continuous timer where early/late taps affect the next player).',
             config: `
+                <div class="config-item config-full">
+                    <label>Variant</label>
+                    <select id="m3-variant" style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;">
+                        <option value="individual">Option A — Individual Laps (timer resets)</option>
+                        <option value="sabotage">Option B — Master Sabotage Timer</option>
+                    </select>
+                </div>
                 <div class="config-item"><label>Target Duration (s)</label><input type="number" id="m3-int" value="2.0" step="0.1" min="0.5" max="10"></div>
                 <div class="config-item"><label>Laps</label><input type="number" id="m3-laps" value="2" min="1" max="10" step="1"></div>
                 <div class="config-item config-full">
@@ -1161,10 +1168,13 @@
             modeData.interval = (parseFloat(el('m3-int').value) || 2) * 1000;
             modeData.laps = clamp(parseInt(el('m3-laps').value, 10) || 2, 1, 10);
             modeData.escalating = !!el('m3-esc').checked;
+            modeData.variant = el('m3-variant')?.value || 'individual';
             modeData.roundMax = realActivePlayers().length * modeData.laps;
             modeData.turnIndex = 0;
             modeData.scores = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.turns = [];
+            modeData.masterElapsed = 0;
+            modeData.cumulativeTarget = 0;
             renderArena(ids, p => `Tap or ${KEYS[p.id - 1].toUpperCase()}`, () => '0 pts');
             relaySetTurn();
             updateKbHint();
@@ -1428,7 +1438,7 @@
         modeData.hits[pId] = elapsed;
         const btn = el(`btn-p${pId}`);
         btn.disabled = true; btn.classList.add('done');
-        el(`stat-p${pId}`).textContent = fmt(elapsed);
+        el(`stat-p${pId}`).textContent = 'LOCKED';
         modeData.done += 1;
         if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
     }
@@ -1517,6 +1527,9 @@
     }
 
     function relayTargetForTurn(turnIndex) {
+        if (modeData.variant === 'sabotage') {
+            return modeData.interval;
+        }
         return modeData.escalating ? modeData.interval * (turnIndex + 1) : modeData.interval;
     }
 
@@ -1528,10 +1541,27 @@
         const target = relayTargetForTurn(modeData.turnIndex);
         modeData.currId = current.id;
         modeData.currTarget = target;
-        startTime = performance.now();
+
+        if (modeData.variant === 'sabotage') {
+            modeData.cumulativeTarget += target;
+            if (modeData.turnIndex === 0) {
+                modeData.sabotageStart = performance.now();
+            }
+            startTime = modeData.sabotageStart;
+        } else {
+            startTime = performance.now();
+        }
+
         display.className = 'stopwatch-display hidden-timer';
         display.textContent = '??.???';
-        showToast(`Lap ${lap}/${modeData.laps} • ${current.name} • Target ${fmt(target)}s`, `var(${current.var})`);
+
+        if (modeData.variant === 'sabotage') {
+            const cTarget = modeData.cumulativeTarget;
+            showToast(`Lap ${lap}/${modeData.laps} • ${current.name} • Target ${fmt(cTarget)}s (cumulative)`, `var(${current.var})`);
+        } else {
+            showToast(`Lap ${lap}/${modeData.laps} • ${current.name} • Target ${fmt(target)}s`, `var(${current.var})`);
+        }
+
         actives.forEach(p => {
             const btn = el(`btn-p${p.id}`);
             btn.disabled = p.id !== current.id;
@@ -1562,12 +1592,32 @@
     function relayHit(pId) {
         if (pId !== modeData.currId) return;
         const elapsed = performance.now() - startTime;
-        const diff = Math.abs(modeData.currTarget - elapsed);
+
+        let diff, tapTiming;
+        if (modeData.variant === 'sabotage') {
+            const cTarget = modeData.cumulativeTarget;
+            diff = Math.abs(cTarget - elapsed);
+            tapTiming = elapsed < cTarget ? 'EARLY' : (elapsed > cTarget ? 'LATE' : 'PERFECT');
+            modeData.lastTapElapsed = elapsed;
+        } else {
+            diff = Math.abs(modeData.currTarget - elapsed);
+            tapTiming = elapsed < modeData.currTarget ? 'EARLY' : (elapsed > modeData.currTarget ? 'LATE' : 'PERFECT');
+        }
+
         const res = getPts(diff, 1000, 0.6, pId);
         modeData.scores[pId] += res.p;
-        modeData.turns.push({ pId, elapsed, diff, res, target: modeData.currTarget });
+        modeData.turns.push({ pId, elapsed, diff, res, target: modeData.variant === 'sabotage' ? modeData.cumulativeTarget : modeData.currTarget, tapTiming });
+
         const stat = el(`stat-p${pId}`);
+        const sub = el(`sub-p${pId}`);
         stat.textContent = `${modeData.scores[pId]} pts`;
+
+        if (modeData.variant === 'sabotage' && sub) {
+            const indicator = tapTiming === 'EARLY' ? '⚡ EARLY' : (tapTiming === 'LATE' ? '🐢 LATE' : '✓ ON TIME');
+            sub.textContent = indicator;
+            sub.style.color = tapTiming === 'EARLY' ? 'var(--warn)' : (tapTiming === 'LATE' ? 'var(--danger)' : 'var(--success)');
+        }
+
         el(`btn-p${pId}`).classList.remove('active');
         if (res.p >= 900) snd('perf');
         else if (res.p > 0) snd('good');
@@ -1879,15 +1929,26 @@
         if (currentMode === 3) {
             display.className = 'stopwatch-display';
             display.textContent = 'DONE';
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Relay complete — ${modeData.laps} lap${modeData.laps === 1 ? '' : 's'}${modeData.escalating ? ', escalating on' : ', escalation off'}.</div><div class="result-grid">`;
+            const variantLabel = modeData.variant === 'sabotage' ? 'Master Sabotage' : 'Individual Laps';
+            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Relay complete — ${variantLabel} — ${modeData.laps} lap${modeData.laps === 1 ? '' : 's'}${modeData.escalating ? ', escalating on' : ', escalation off'}.</div><div class="result-grid">`;
             realActivePlayers().forEach(p => {
                 const pts = modeData.scores[p.id] || 0;
                 p.score += pts;
+                const playerTurns = modeData.turns.filter(t => t.pId === p.id);
+                let turnDetails = '';
+                if (modeData.variant === 'sabotage') {
+                    turnDetails = playerTurns.map(t => {
+                        const icon = t.tapTiming === 'EARLY' ? '⚡' : (t.tapTiming === 'LATE' ? '🐢' : '✓');
+                        return `${icon} ${fmt(t.diff)}s off`;
+                    }).join(', ');
+                } else {
+                    turnDetails = playerTurns.map(t => `${fmt(t.diff)}s off`).join(', ');
+                }
                 html += `
                     <div class="res-card">
                         <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
                         <div class="res-val">${pts}</div>
-                        <div class="res-note">${modeData.turns.filter(t => t.pId === p.id).length} turn${modeData.turns.filter(t => t.pId === p.id).length === 1 ? '' : 's'}</div>
+                        <div class="res-note">${playerTurns.length} turn${playerTurns.length === 1 ? '' : 's'}${turnDetails ? ' — ' + turnDetails : ''}</div>
                         <div class="res-pts">+${pts}</div>
                     </div>`;
             });
