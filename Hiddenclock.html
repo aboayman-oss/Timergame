@@ -539,19 +539,13 @@
                 <div class="config-note">Timer hides after the specified percentage of the countdown has elapsed.</div>`
         },
         8: {
-            n: 'Duel', short: 'Duel',
-            desc: 'Quick Draw standoff! Wait for the "DRAW!" signal, then tap. Tap before the signal = misfire. Fastest reaction after the signal wins!',
+            n: 'Reflex Duel', short: 'Reflex',
+            desc: 'A countdown runs then freezes. After a hidden delay the signal flashes — tap immediately! Tap before the signal = misfire. Fastest reaction wins!',
             config: `
-                <div class="config-item"><label>Delay Min (s)</label><input type="number" id="m8-min" value="2" min="1" max="10" step="0.5"></div>
-                <div class="config-item"><label>Delay Max (s)</label><input type="number" id="m8-max" value="6" min="2" max="15" step="0.5"></div>
-                <div class="config-note">A random delay before "DRAW!" — tap early and you misfire!</div>`
-        },
-        9: {
-            n: 'Reflex', short: 'Reflex',
-            desc: 'A countdown runs, freezes at a random point, then flashes GREEN after a hidden delay. Tap on green — early taps are disqualified!',
-            config: `
-                <div class="config-item"><label>Countdown (s)</label><input type="number" id="m9-cd" value="3" min="1" max="10" step="0.5"></div>
-                <div class="config-note">Countdown freezes, then flashes green. Tap ONLY on green!</div>`
+                <div class="config-item"><label>Countdown (s)</label><input type="number" id="m8-cd" value="3" min="1" max="10" step="0.5"></div>
+                <div class="config-item"><label>Extra Delay Min (s)</label><input type="number" id="m8-min" value="1" min="0.5" max="5" step="0.5"></div>
+                <div class="config-item"><label>Extra Delay Max (s)</label><input type="number" id="m8-max" value="3" min="1" max="8" step="0.5"></div>
+                <div class="config-note">Countdown freezes, then after a random hidden delay the signal fires. Tap early = misfire!</div>`
         }
     };
 
@@ -991,7 +985,6 @@
         if (currentMode === 6) return predictTapHit(pId);
         if (currentMode === 7) return blindHit(pId);
         if (currentMode === 8) return duelHit(pId);
-        if (currentMode === 9) return splitHit(pId);
     }
 
     function sanitizeRange(minId, maxId, defaults) {
@@ -1307,45 +1300,21 @@
         }
 
         if (currentMode === 8) {
-            const [minS, maxS] = sanitizeRange('m8-min', 'm8-max', { min: 2, max: 6 });
-            modeData.delay = rand(minS * 1000, maxS * 1000);
-            modeData.hits = {};
-            modeData.done = 0;
-            modeData.signalFired = false;
-            modeData.misfires = {};
-            display.textContent = 'WAIT...';
-            display.className = 'stopwatch-display';
-            showToast('Standoff! Wait for "DRAW!" — don\'t tap early!');
-            renderArena(ids, p => `${KEYS[p.id - 1].toUpperCase()} — WAIT`, () => '...');
-            updateKbHint();
-            addTimeout(() => {
-                if (gs !== STATE.RUNNING) return;
-                modeData.signalFired = true;
-                modeData.signalTime = performance.now();
-                display.className = 'stopwatch-display running';
-                display.textContent = 'DRAW!';
-                showToast('DRAW! TAP NOW!', 'var(--success)');
-                snd('go'); hap([50, 30, 80]);
-                addTimeout(endRound, 3000);
-            }, modeData.delay);
-            return;
-        }
-
-        if (currentMode === 9) {
-            const cdTime = (parseFloat(el('m9-cd')?.value) || 3) * 1000;
+            const cdTime = (parseFloat(el('m8-cd')?.value) || 3) * 1000;
+            const [minS, maxS] = sanitizeRange('m8-min', 'm8-max', { min: 1, max: 3 });
             modeData.cdTime = cdTime;
             modeData.hits = {};
             modeData.done = 0;
             modeData.signalFired = false;
             modeData.misfires = {};
             modeData.freezePoint = rand(0.3, 0.7);
-            modeData.hiddenDelay = rand(100, 500);
+            modeData.hiddenDelay = rand(minS * 1000, maxS * 1000);
             const freezeAt = cdTime * (1 - modeData.freezePoint);
             modeData.freezeAtMs = freezeAt;
             modeData.frozen = false;
             display.className = 'stopwatch-display running';
-            showToast('Watch the countdown... wait for GREEN!');
-            renderArena(ids);
+            showToast('Watch the countdown... wait for the signal!');
+            renderArena(ids, p => `${KEYS[p.id - 1].toUpperCase()} — WAIT`, () => '...');
             updateKbHint();
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
@@ -1361,8 +1330,8 @@
                         modeData.signalTime = performance.now();
                         display.className = 'stopwatch-display';
                         display.style.color = 'var(--success)';
-                        display.textContent = 'GO!';
-                        showToast('GREEN! TAP NOW!', 'var(--success)');
+                        display.textContent = 'DRAW!';
+                        showToast('DRAW! TAP NOW!', 'var(--success)');
                         snd('go'); hap([50, 30, 80]);
                         addTimeout(endRound, 3000);
                     }, modeData.hiddenDelay);
@@ -1511,28 +1480,6 @@
         }
     }
     function blindHit(pId) { precisionHit(pId); }
-    function splitHit(pId) {
-        if (modeData.hits?.[pId] != null || modeData.misfires?.[pId]) return;
-        const btn = el(`btn-p${pId}`);
-        if (!modeData.signalFired) {
-            modeData.misfires[pId] = true;
-            btn.disabled = true;
-            btn.classList.add('eliminated');
-            el(`stat-p${pId}`).textContent = 'EARLY';
-            el(`sub-p${pId}`).textContent = 'DISQUALIFIED';
-            snd('bad'); shakeUI(); hap([60]);
-            modeData.done += 1;
-            if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
-            return;
-        }
-        const reaction = performance.now() - modeData.signalTime;
-        modeData.hits[pId] = reaction;
-        btn.disabled = true; btn.classList.add('done');
-        el(`stat-p${pId}`).textContent = `${reaction.toFixed(0)}ms`;
-        modeData.done += 1;
-        if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
-    }
-
     function relayTargetForTurn(turnIndex) {
         if (modeData.variant === 'sabotage') {
             return modeData.interval;
@@ -1900,13 +1847,14 @@
         if (currentMode === 8) {
             display.className = 'stopwatch-display';
             display.textContent = 'RESULTS';
+            display.style.color = '';
             const validHits = realActivePlayers().filter(p => modeData.hits[p.id] != null && !modeData.misfires[p.id]);
             // Sort valid hits by speed (fastest first) for tiered scoring
             const ranked = validHits.slice().sort((a, b) => modeData.hits[a.id] - modeData.hits[b.id]);
             const tierPoints = [1000, 700, 400, 200, 100];
             const rankMap = {};
             ranked.forEach((p, i) => { rankMap[p.id] = tierPoints[i] || 0; });
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Quick Draw — Tiered Scoring</div><div class="result-grid">`;
+            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Reflex Duel — Tiered Scoring</div><div class="result-grid">`;
             realActivePlayers().forEach(p => {
                 const misfired = !!modeData.misfires[p.id];
                 const hit = modeData.hits[p.id];
@@ -1919,37 +1867,7 @@
                     <div class="res-card">
                         <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
                         <div class="res-val">${label}</div>
-                        <div class="res-pts ${pts === 0 ? 'zero' : ''}">${rankLabel ? rankLabel + ' ' : ''}+${pts}</div>
-                    </div>`;
-            });
-            html += `</div>`;
-            return showEndScreen(html);
-        }
-
-        if (currentMode === 9) {
-            display.className = 'stopwatch-display';
-            display.textContent = 'RESULTS';
-            display.style.color = '';
-            const validHits = realActivePlayers().filter(p => modeData.hits[p.id] != null && !modeData.misfires[p.id]);
-            // Sort valid hits by speed (fastest first) for tiered scoring
-            const ranked = validHits.slice().sort((a, b) => modeData.hits[a.id] - modeData.hits[b.id]);
-            const tierPoints = [1000, 700, 400, 200, 100];
-            const rankMap = {};
-            ranked.forEach((p, i) => { rankMap[p.id] = tierPoints[i] || 0; });
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Reflex — Tiered Scoring</div><div class="result-grid">`;
-            realActivePlayers().forEach(p => {
-                const misfired = !!modeData.misfires[p.id];
-                const hit = modeData.hits[p.id];
-                const pts = misfired || hit == null ? 0 : (rankMap[p.id] || 0);
-                p.score += pts;
-                const rank = ranked.findIndex(r => r.id === p.id);
-                let label = misfired ? 'EARLY — DQ' : (hit == null ? 'NO TAP' : `${hit.toFixed(0)}ms`);
-                const rankLabel = pts > 0 ? (rank === 0 ? '1st' : rank === 1 ? '2nd' : rank === 2 ? '3rd' : `${rank + 1}th`) : '';
-                html += `
-                    <div class="res-card">
-                        <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
-                        <div class="res-val">${label}</div>
-                        <div class="res-note">${misfired ? 'DISQUALIFIED' : (rankLabel ? rankLabel + ' — ' + (rank === 0 ? 'Fastest!' : '') : '')}</div>
+                        <div class="res-note">${misfired ? 'Too early!' : (rankLabel ? rankLabel + (rank === 0 ? ' — Fastest!' : '') : '')}</div>
                         <div class="res-pts ${pts === 0 ? 'zero' : ''}">${rankLabel ? rankLabel + ' ' : ''}+${pts}</div>
                     </div>`;
             });
