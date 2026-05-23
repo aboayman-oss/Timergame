@@ -171,6 +171,7 @@
             letter-spacing: 2px; text-align: center; margin: 6px 0 18px; color: var(--text);
             text-shadow: 0 0 20px rgba(232,240,254,0.1); line-height: 1; transition: all 0.2s;
             min-height: 74px; display: flex; align-items: center; justify-content: center;
+            white-space: nowrap;
         }
         .stopwatch-display.running { color: var(--p1); text-shadow: 0 0 30px var(--p1-dim); }
         .stopwatch-display.hidden-timer { opacity: 0.12; filter: blur(4px); }
@@ -201,7 +202,7 @@
         @keyframes cooldownSwipe { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
         .pb-name { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; z-index: 2; pointer-events: none; }
         .pb-stat { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; font-weight: 900; z-index: 2; pointer-events: none; }
-        .pb-sub  { font-size: 0.6rem; opacity: 0.6; z-index: 2; pointer-events: none; text-align: center; }
+        .pb-sub  { font-size: 0.6rem; opacity: 0.6; z-index: 2; pointer-events: none; text-align: center; white-space: nowrap; }
 
         .guess-stage {
             background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
@@ -505,16 +506,14 @@
         },
         4: {
             n: 'Bomb', short: 'Bomb',
-            desc: 'Hot potato! The bomb has a hidden fuse — hold it for the minimum time, then pass before it blows. Hold longer for exponential bonus points, but pass too quickly for zero risk reward!',
+            desc: 'Hot potato! The bomb has a hidden fuse — hold it for the minimum time, then pass before it blows. Hold longer for bonus points, but get caught holding and you lose!',
             config: `
-                <div class="config-item"><label>Fuse Min (s)</label><input type="number" id="m4-min" value="10" min="3" max="60" step="1"></div>
-                <div class="config-item"><label>Fuse Max (s)</label><input type="number" id="m4-max" value="25" min="4" max="90" step="1"></div>
                 <div class="config-item"><label>Min Hold (s)</label><input type="number" id="m4-hold" value="2.0" min="0.5" max="5.0" step="0.1"></div>
                 <div class="config-item config-full">
                     <label>Risk Bonus</label>
                     <div class="config-toggle"><span>Bonus for holding longer</span><label class="toggle"><input type="checkbox" id="m4-risk" checked><span class="toggle-track"></span></label></div>
                 </div>
-                <div class="config-note">Hold the bomb for the minimum time before passing. Hold longer for risk bonus points!</div>`
+                <div class="config-note">Hold the bomb for the minimum time before passing. The fuse length is random and hidden!</div>`
         },
         5: {
             n: 'Cliff', short: 'Cliff',
@@ -1191,8 +1190,8 @@
                 addTimeout(resetUI, 900);
                 return;
             }
-            const [minS, maxS] = sanitizeRange('m4-min', 'm4-max', { min: 10, max: 25 });
-            modeData.fuse = rand(minS * 1000, maxS * 1000);
+            // Fuse is always random 8-30s, hidden from players (no config exposed)
+            modeData.fuse = rand(8000, 30000);
             modeData.alive = ids.slice();
             modeData.holderIdx = Math.floor(Math.random() * modeData.alive.length);
             modeData.passCounts = Object.fromEntries(ids.map(id => [id, 0]));
@@ -1204,10 +1203,16 @@
             modeData.holdUnlocked = false;
             // Randomize min hold slightly each turn (+/- 30%)
             modeData.baseMinHold = modeData.minHold;
+            // Pass rotation: track last passer to enforce cooldown in 3+ player games
+            modeData.lastPasser = null;
+            modeData.lastReceiver = null;
+            // Haptic/visual randomization: pick random thresholds so feedback is unpredictable
+            modeData.hapticSeed = 0.2 + Math.random() * 0.4; // random start between 20-60% of fuse
+            modeData.hapticFreq = 0.03 + Math.random() * 0.07; // random haptic probability factor
             display.className = 'stopwatch-display danger';
             display.textContent = 'BOMB';
             renderArena(ids, p => `Pass to ${KEYS[p.id - 1].toUpperCase()}`, () => 'PASS');
-            showToast(`Hold the bomb for ${(modeData.minHold / 1000).toFixed(1)}s before you can pass!`, 'var(--danger)');
+            showToast(`Hold the bomb before you can pass!`, 'var(--danger)');
             bombSetTurn(true);
             updateKbHint();
             liveDisplay(() => {
@@ -1218,11 +1223,11 @@
                 const holdRemaining = Math.max(0, modeData.minHold - holdElapsed);
 
                 if (now < (modeData.passFlashUntil || 0)) {
-                    display.textContent = '🔥 PASS!';
+                    display.textContent = '\u{1F525} PASS!';
                 } else if (holdRemaining > 0) {
                     display.textContent = `HOLD ${(holdRemaining / 1000).toFixed(1)}s`;
                 } else {
-                    display.textContent = '💣 PASS!';
+                    display.textContent = '\u{1F4A3} PASS!';
                 }
 
                 if (holdRemaining <= 0 && !modeData.holdUnlocked) {
@@ -1230,12 +1235,14 @@
                     bombUnlockPass();
                 }
 
+                // Unpredictable tension feedback: randomized thresholds per round
                 const gc = el('game-container');
-                if (pct > 0.3) {
-                    const intensity = Math.min(1, (pct - 0.3) / 0.7);
-                    gc.style.background = `rgba(${Math.round(255 * intensity)}, ${Math.round(17 * (1 - intensity))}, ${Math.round(23 * (1 - intensity))}, ${0.1 + intensity * 0.3})`;
-                    if (intensity > 0.5 && Math.random() < intensity * 0.1) {
-                        hap([Math.round(20 + intensity * 80)]);
+                if (pct > modeData.hapticSeed) {
+                    // Intensity ramps but starts from a random point — players can't pinpoint exact time
+                    const intensity = Math.min(1, (pct - modeData.hapticSeed) / (1 - modeData.hapticSeed));
+                    gc.style.background = `rgba(${Math.round(180 + 75 * intensity)}, ${Math.round(30 * (1 - intensity))}, ${Math.round(30 * (1 - intensity))}, ${0.05 + intensity * 0.15})`;
+                    if (Math.random() < modeData.hapticFreq * intensity) {
+                        hap([Math.round(15 + Math.random() * 40)]);
                     }
                 }
                 if (elapsed >= modeData.fuse) {
@@ -1644,12 +1651,14 @@
                 btn.style.borderColor = 'var(--danger)';
                 btn.classList.add('active');
                 btn.classList.add('cooldown');
-                el(`stat-p${id}`).textContent = '💣 BOMB';
-                el(`sub-p${id}`).textContent = `Hold ${(modeData.minHold / 1000).toFixed(1)}s…`;
+                el(`stat-p${id}`).textContent = '\u{1F4A3} BOMB';
+                el(`sub-p${id}`).textContent = `Hold ${(modeData.minHold / 1000).toFixed(1)}s\u2026`;
             } else {
                 btn.disabled = true;
-                el(`stat-p${id}`).textContent = modeData.passCounts[id] ? `${modeData.passCounts[id]} pass${modeData.passCounts[id] === 1 ? '' : 'es'}` : 'READY';
-                el(`sub-p${id}`).textContent = 'Waiting…';
+                // Show cooldown indicator if this player can't receive due to rotation rule
+                const isCooledDown = modeData.alive.length >= 3 && modeData.lastReceiver === id && modeData.lastPasser === holderId;
+                el(`stat-p${id}`).textContent = isCooledDown ? '\u{1F6AB} COOLDOWN' : (modeData.passCounts[id] ? `${modeData.passCounts[id]} pass${modeData.passCounts[id] === 1 ? '' : 'es'}` : 'READY');
+                el(`sub-p${id}`).textContent = isCooledDown ? 'Can\u2019t receive' : 'Waiting\u2026';
             }
         });
         modeData.locked = holderId;
@@ -1665,12 +1674,20 @@
             if (id === holderId) {
                 btn.disabled = true;
                 btn.classList.remove('cooldown');
-                el(`stat-p${id}`).textContent = '💣 BOMB';
+                el(`stat-p${id}`).textContent = '\u{1F4A3} BOMB';
                 el(`sub-p${id}`).textContent = 'PASS NOW!';
             } else {
-                btn.disabled = false;
-                btn.classList.add('pulse-active');
-                el(`sub-p${id}`).textContent = `Pass here • ${KEYS[id - 1].toUpperCase()}`;
+                // Enforce pass rotation: in 3+ player games, block passing back to the person who just passed to you
+                const isCooledDown = modeData.alive.length >= 3 && modeData.lastReceiver === id && modeData.lastPasser === holderId;
+                if (isCooledDown) {
+                    btn.disabled = true;
+                    el(`stat-p${id}`).textContent = '\u{1F6AB} COOLDOWN';
+                    el(`sub-p${id}`).textContent = 'Can\u2019t receive';
+                } else {
+                    btn.disabled = false;
+                    btn.classList.add('pulse-active');
+                    el(`sub-p${id}`).textContent = `Pass here \u2022 ${KEYS[id - 1].toUpperCase()}`;
+                }
             }
         });
         hap([30, 20, 30]);
@@ -1680,12 +1697,26 @@
         const holderId = modeData.alive[modeData.holderIdx];
         if (pId === holderId) return;
         if (!modeData.holdUnlocked) return;
+        // Enforce pass rotation cooldown: can't pass back to person who just gave you the bomb
+        if (modeData.alive.length >= 3 && modeData.lastReceiver === pId && modeData.lastPasser === holderId) return;
+
         const holdDuration = performance.now() - modeData.holdStart;
         const extraHold = Math.max(0, holdDuration - modeData.minHold);
-        modeData.riskTime[holderId] = (modeData.riskTime[holderId] || 0) + extraHold;
+
+        // Risk bonus exploit fix: cap the extra hold time that counts for bonus.
+        // Players who hold until the visual warning cannot bank unlimited risk time.
+        // Max creditable extra hold is 3 seconds per turn.
+        const cappedExtra = Math.min(extraHold, 3000);
+        modeData.riskTime[holderId] = (modeData.riskTime[holderId] || 0) + cappedExtra;
+
         modeData.passCounts[holderId] += 1;
         modeData.passFlashUntil = performance.now() + 180;
-        display.textContent = '🔥 PASS!';
+        display.textContent = '\u{1F525} PASS!';
+
+        // Track pass rotation
+        modeData.lastPasser = holderId;
+        modeData.lastReceiver = pId;
+
         const targetIdx = modeData.alive.indexOf(pId);
         if (targetIdx === -1) return;
         modeData.holderIdx = targetIdx;
@@ -1710,17 +1741,17 @@
             const survived = p.id !== loserId;
             const passes = modeData.passCounts[p.id] || 0;
             const riskMs = modeData.riskTime[p.id] || 0;
-            // Exponential risk bonus: points multiply the longer you hold
-            // Penalize hot-potato: if total extra hold < 500ms, no risk bonus
+            // Scoring: survivors get base points + pass bonus + risk bonus
+            // Risk bonus uses capped time (max 3s/turn) to prevent exploit
             let riskPts = 0;
             if (modeData.riskBonus && survived && riskMs > 500) {
-                // Exponential: base 1.5^(seconds held beyond minimum)
+                // Linear scaling: 30 points per second of risk held (capped per turn)
                 const riskSeconds = riskMs / 1000;
-                riskPts = Math.round(50 * Math.pow(1.8, riskSeconds));
+                riskPts = Math.round(30 * riskSeconds);
             }
-            const pts = survived ? 200 + passes * 50 + riskPts : 0;
+            const pts = survived ? 100 + passes * 40 + riskPts : 0;
             p.score += pts;
-            const riskLabel = modeData.riskBonus && survived ? `<div style="font-size:0.7rem;opacity:0.8">Risk: ${(riskMs / 1000).toFixed(1)}s (+${riskPts}${riskMs <= 500 ? ' — too safe!' : ''})</div>` : '';
+            const riskLabel = modeData.riskBonus && survived ? `<div style="font-size:0.7rem;opacity:0.8">Risk: ${(riskMs / 1000).toFixed(1)}s (+${riskPts}${riskMs <= 500 ? ' \u2014 too safe!' : ''})</div>` : '';
             html += `
                 <div class="res-card">
                     <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
