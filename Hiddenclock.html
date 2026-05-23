@@ -474,8 +474,8 @@
     const STATE = { MENU: 0, CD: 1, RUNNING: 2, GUESSING: 3, RESULT: 4, TRANSITION: 5 };
     const MODES = {
         1: {
-            n: 'Predict', short: 'Predict',
-            desc: 'A hidden timer runs for a secret duration, then stops. A counter starts — tap when you think it matches the hidden time!',
+            n: 'Predict (Manual)', short: 'Manual',
+            desc: 'A hidden timer runs for a secret duration. Type your guessed time into the input field and press Lock. Your guess is hidden from other players!',
             config: `
                 <div class="config-item"><label>Min (s)</label><input type="number" id="m1-min" value="3" min="1" max="30" step="0.5"></div>
                 <div class="config-item"><label>Max (s)</label><input type="number" id="m1-max" value="8" min="1" max="45" step="0.5"></div>`
@@ -517,9 +517,11 @@
                 <div class="config-note" style="color:var(--danger)">Going late busts the attempt instantly.</div>`
         },
         6: {
-            n: 'Echo', short: 'Echo',
-            desc: 'Listen to a duration marked by start and end beeps, then recreate it from memory. All players must confirm ready before the replication phase begins.',
-            config: `<div class="config-note">Random memorize window: 2 to 6 seconds.</div>`
+            n: 'Predict (Tap)', short: 'Predict',
+            desc: 'A hidden timer runs for a secret duration, then stops. A counter starts — tap when you think it matches the hidden time!',
+            config: `
+                <div class="config-item"><label>Min (s)</label><input type="number" id="m6-min" value="3" min="1" max="30" step="0.5"></div>
+                <div class="config-item"><label>Max (s)</label><input type="number" id="m6-max" value="8" min="1" max="45" step="0.5"></div>`
         },
         7: {
             n: 'Blind Countdown', short: 'Blind',
@@ -954,32 +956,6 @@
         startNumericCountdown(() => launchMode());
     }
 
-    function startEchoReadyCountdown() {
-        gs = STATE.TRANSITION;
-        arena.classList.add('hidden');
-        let count = 3;
-        display.className = 'stopwatch-display small';
-        display.textContent = '3';
-        showToast('GET READY');
-        snd('tick'); hap([12]);
-        const tick = () => {
-            count -= 1;
-            if (count > 0) {
-                display.className = 'stopwatch-display small';
-                void display.offsetWidth;
-                display.classList.add('cd-pop');
-                display.textContent = String(count);
-                showToast('GET READY');
-                snd('tick'); hap([12]);
-                addTimeout(tick, 1000);
-            } else {
-                snd('go'); hap([10, 25, 40]);
-                startEchoPhase2();
-            }
-        };
-        addTimeout(tick, 1000);
-    }
-
     function handleMainAction(e) {
         if (e) ripple(e, mainBtn);
         if (gs === STATE.MENU) startCountdown();
@@ -1002,11 +978,11 @@
         hap([20]); snd('tap');
 
         if (currentMode === 2) return precisionHit(pId);
-        if (currentMode === 1) return predictTapHit(pId);
+        if (currentMode === 1) return manualPredictHit(pId);
         if (currentMode === 3) return relayHit(pId);
         if (currentMode === 4) return bombHit(pId);
         if (currentMode === 5) return zenithHit(pId);
-        if (currentMode === 6) return echoHit(pId);
+        if (currentMode === 6) return predictTapHit(pId);
         if (currentMode === 7) return blindHit(pId);
         if (currentMode === 8) return duelHit(pId);
         if (currentMode === 9) return splitHit(pId);
@@ -1064,6 +1040,77 @@
                     snd('bad');
                     hbEl.style.display = 'none';
                     hbEl.classList.remove('heartbeat-pulse');
+                    if (modeData.heartbeatOsc) { try { modeData.heartbeatOsc.stop(); } catch(e){} }
+                    if (modeData.heartbeatLfo) { try { modeData.heartbeatLfo.stop(); } catch(e){} }
+                    // Manual input: players type their guess and press Lock
+                    gs = STATE.RUNNING;
+                    modeData.guesses = {};
+                    modeData.lockedCount = 0;
+                    display.className = 'stopwatch-display';
+                    display.textContent = 'TIME\'S UP';
+                    showToast('Type your guess and press Lock!', 'var(--success)');
+                    // Build manual input UI for each player
+                    arena.classList.remove('hidden');
+                    arena.innerHTML = '';
+                    realActivePlayers().forEach(p => {
+                        const card = document.createElement('div');
+                        card.className = 'player-zone';
+                        card.style.setProperty('--zone-color', `var(${p.var})`);
+                        card.innerHTML = `
+                            <div class="zone-name" style="color:var(${p.var})">${safe(p.name)}</div>
+                            <div class="manual-guess-container" id="guess-container-p${p.id}" style="display:flex;align-items:center;gap:8px;justify-content:center;margin:8px 0;">
+                                <input type="number" id="guess-input-p${p.id}" placeholder="seconds" step="0.001" min="0" max="999"
+                                    style="width:100px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Orbitron',sans-serif;font-size:0.9rem;text-align:center;">
+                                <button class="btn btn-outline" id="guess-lock-p${p.id}" onclick="lockManualGuess(${p.id})"
+                                    style="padding:8px 14px;font-size:0.8rem;font-weight:700;">LOCK</button>
+                            </div>
+                            <div class="zone-stat" id="stat-p${p.id}" style="font-size:0.8rem;color:var(--text-dim)">Enter your guess</div>`;
+                        arena.appendChild(card);
+                    });
+                    updateKbHint();
+                    return false;
+                }
+            });
+            return;
+        }
+
+        if (currentMode === 6) {
+            display.textContent = '??.???';
+            const [minS, maxS] = sanitizeRange('m6-min', 'm6-max', { min: 3, max: 8 });
+            modeData.target = rand(minS * 1000, maxS * 1000);
+            modeData.stopped = false;
+            showToast('Clock is running... invisibly!');
+            snd('go');
+            const hbEl6 = el('heartbeat-indicator');
+            hbEl6.style.display = 'block';
+            hbEl6.classList.add('heartbeat-pulse');
+            modeData.heartbeatAc = null;
+            try {
+                const ac = getAudioCtx();
+                modeData.heartbeatAc = ac;
+                const osc = ac.createOscillator();
+                const gain = ac.createGain();
+                osc.connect(gain); gain.connect(ac.destination);
+                osc.type = 'sine'; osc.frequency.value = 1.5;
+                gain.gain.value = 0.04;
+                const lfo = ac.createOscillator();
+                const lfoGain = ac.createGain();
+                lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+                lfo.frequency.value = 0.3 + Math.random() * 0.5;
+                lfoGain.gain.value = 0.8;
+                lfo.start(); osc.start();
+                modeData.heartbeatOsc = osc;
+                modeData.heartbeatLfo = lfo;
+            } catch(e) {}
+            liveDisplay(() => {
+                const elapsed = performance.now() - startTime;
+                if (elapsed >= modeData.target && !modeData.stopped) {
+                    modeData.stopped = true;
+                    modeData.actual = elapsed;
+                    clearTimers();
+                    snd('bad');
+                    hbEl6.style.display = 'none';
+                    hbEl6.classList.remove('heartbeat-pulse');
                     if (modeData.heartbeatOsc) { try { modeData.heartbeatOsc.stop(); } catch(e){} }
                     if (modeData.heartbeatLfo) { try { modeData.heartbeatLfo.stop(); } catch(e){} }
                     // Tap-to-lock: show a running counter, players tap to lock their guess
@@ -1200,49 +1247,6 @@
             renderArena(ids);
             updateKbHint();
             addTimeout(endRound, modeData.target + 4500);
-            return;
-        }
-
-        if (currentMode === 6) {
-            modeData.phase = 1;
-            modeData.target = rand(2000, 6000);
-            modeData.replayUsed = false;
-            display.className = 'stopwatch-display running';
-            display.textContent = 'LISTEN...';
-            showToast(`Listen... (${(2).toFixed(0)} to ${(6).toFixed(0)} seconds)`);
-            snd('go'); hap([30]);
-            const barTrack = document.createElement('div');
-            barTrack.className = 'echo-bar-track';
-            barTrack.id = 'echo-bar-track';
-            barTrack.innerHTML = '<div class="echo-bar" id="echo-bar"></div>';
-            el('game-container').insertBefore(barTrack, arena);
-            const echoStart = performance.now();
-            liveDisplay(() => {
-                const elapsed = performance.now() - echoStart;
-                const pct = Math.min(100, (elapsed / modeData.target) * 100);
-                const bar = el('echo-bar');
-                if (bar) bar.style.width = pct + '%';
-                if (elapsed >= modeData.target) {
-                    snd('bad'); hap([40, 40, 40]);
-                    if (bar) bar.style.width = '100%';
-                    display.className = 'stopwatch-display';
-                    display.textContent = 'READY?';
-                    showToast('All players: tap your button when ready');
-                    modeData.phase = 'ready';
-                    modeData.readyPlayers = {};
-                    modeData.readyCount = 0;
-                    const replayHtml = !modeData.replayUsed ? `<button class="btn btn-outline" id="echo-replay-btn" onclick="echoReplay()" style="margin:8px auto;padding:8px 16px;font-size:0.8rem;width:auto;">🔁 Replay Once</button>` : '';
-                    renderArena(realActivePlayers().map(p => p.id), p => `Tap when ready`, () => 'NOT READY');
-                    if (replayHtml) {
-                        arena.insertAdjacentHTML('beforebegin', replayHtml);
-                    }
-                    arena.classList.remove('hidden');
-                    updateKbHint();
-                    const track = el('echo-bar-track');
-                    if (track) track.remove();
-                    return false;
-                }
-            });
             return;
         }
 
@@ -1462,24 +1466,32 @@
             addTimeout(endRound, hasBust ? 1200 : 300);
         }
     }
-    function echoHit(pId) {
-        if (modeData.phase === 'ready') {
-            if (modeData.readyPlayers[pId]) return;
-            modeData.readyPlayers[pId] = true;
-            modeData.readyCount += 1;
-            const btn = el(`btn-p${pId}`);
-            btn.classList.add('done');
-            el(`stat-p${pId}`).textContent = 'READY';
-            snd('tick');
-            if (modeData.readyCount >= realActivePlayers().length) {
-                modeData.phase = 'countdown';
-                const replayBtn = el('echo-replay-btn');
-                if (replayBtn) replayBtn.remove();
-                startEchoReadyCountdown();
-            }
+    function manualPredictHit(pId) {
+        // In manual mode, tapping the arena button does nothing - players use the input field
+        return;
+    }
+
+    function lockManualGuess(pId) {
+        if (modeData.guesses?.[pId] != null) return;
+        const input = el(`guess-input-p${pId}`);
+        if (!input) return;
+        const val = parseFloat(input.value);
+        if (Number.isNaN(val) || val < 0) {
+            showToast('Enter a valid number!', 'var(--danger)');
             return;
         }
-        if (modeData.phase === 2) precisionHit(pId);
+        modeData.guesses[pId] = val * 1000; // convert seconds to ms
+        modeData.lockedCount += 1;
+        // Hide the value (password-like masking)
+        input.type = 'password';
+        input.disabled = true;
+        const lockBtn = el(`guess-lock-p${pId}`);
+        if (lockBtn) { lockBtn.disabled = true; lockBtn.textContent = '🔒'; }
+        el(`stat-p${pId}`).textContent = 'LOCKED';
+        snd('tap'); hap([20]);
+        if (modeData.lockedCount >= realActivePlayers().length) {
+            addTimeout(endRound, 400);
+        }
     }
     function blindHit(pId) { precisionHit(pId); }
     function splitHit(pId) {
@@ -1502,36 +1514,6 @@
         el(`stat-p${pId}`).textContent = `${reaction.toFixed(0)}ms`;
         modeData.done += 1;
         if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
-    }
-
-    function echoReplay() {
-        if (modeData.replayUsed || modeData.phase !== 'ready') return;
-        modeData.replayUsed = true;
-        const btn = el('echo-replay-btn');
-        if (btn) btn.remove();
-        display.className = 'stopwatch-display running';
-        display.textContent = 'REPLAY...';
-        snd('go'); hap([30]);
-        const barTrack = document.createElement('div');
-        barTrack.className = 'echo-bar-track';
-        barTrack.id = 'echo-bar-track';
-        barTrack.innerHTML = '<div class="echo-bar" id="echo-bar"></div>';
-        el('game-container').insertBefore(barTrack, arena);
-        const replayStart = performance.now();
-        liveDisplay(() => {
-            const elapsed = performance.now() - replayStart;
-            const pct = Math.min(100, (elapsed / modeData.target) * 100);
-            const bar = el('echo-bar');
-            if (bar) bar.style.width = pct + '%';
-            if (elapsed >= modeData.target) {
-                snd('bad'); hap([40, 40, 40]);
-                display.className = 'stopwatch-display';
-                display.textContent = 'READY?';
-                const track = el('echo-bar-track');
-                if (track) track.remove();
-                return false;
-            }
-        });
     }
 
     function relayTargetForTurn(turnIndex) {
@@ -1701,21 +1683,6 @@
         showEndScreen(html);
     }
 
-    function startEchoPhase2() {
-        clearTimers();
-        gs = STATE.RUNNING;
-        modeData.phase = 2;
-        modeData.hits = {};
-        modeData.done = 0;
-        startTime = performance.now();
-        display.className = 'stopwatch-display hidden-timer';
-        display.textContent = '??.???';
-        showToast('Recreate the memorized duration.');
-        renderArena(realActivePlayers().map(p => p.id));
-        updateKbHint();
-        addTimeout(endRound, modeData.target + 5000);
-    }
-
     function duelHit(pId) {
         if (modeData.hits?.[pId] != null || modeData.misfires?.[pId]) return;
         const btn = el(`btn-p${pId}`);
@@ -1785,7 +1752,7 @@
         arena.classList.add('hidden');
         let html = '';
 
-        if (currentMode === 1) {
+        if (currentMode === 1 || currentMode === 6) {
             display.className = 'stopwatch-display';
             display.textContent = fmt(modeData.actual);
             html = `<div style="margin-bottom:10px;color:var(--text-dim)">Actual: <strong>${fmt(modeData.actual)}s</strong></div><div class="result-grid">`;
@@ -1806,7 +1773,7 @@
             return showEndScreen(html);
         }
 
-        if (currentMode === 2 || currentMode === 5 || currentMode === 6 || currentMode === 7) {
+        if (currentMode === 2 || currentMode === 5 || currentMode === 7) {
             const target = modeData.target;
             display.className = 'stopwatch-display';
             display.textContent = fmt(target);
@@ -1815,7 +1782,6 @@
             const titleMap = {
                 2: 'Target',
                 5: 'Target',
-                6: 'Echo target',
                 7: 'Zero point'
             };
 
