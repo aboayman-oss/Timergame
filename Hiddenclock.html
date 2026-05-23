@@ -474,7 +474,7 @@
     const MODES = {
         1: {
             n: 'Predict', short: 'Predict',
-            desc: 'A hidden timer runs for a secret duration, then stops. Everyone locks in a guess for how long it lasted.',
+            desc: 'A hidden timer runs for a secret duration, then stops. A counter starts — tap when you think it matches the hidden time!',
             config: `
                 <div class="config-item"><label>Min (s)</label><input type="number" id="m1-min" value="3" min="1" max="30" step="0.5"></div>
                 <div class="config-item"><label>Max (s)</label><input type="number" id="m1-max" value="8" min="1" max="45" step="0.5"></div>`
@@ -497,7 +497,7 @@
         },
         4: {
             n: 'Bomb', short: 'Bomb',
-            desc: 'Hot potato! The bomb has a hidden fuse — hold it for the minimum time, then pass before it blows. Hold longer for bonus points!',
+            desc: 'Hot potato! The bomb has a hidden fuse — hold it for the minimum time, then pass before it blows. Hold longer for exponential bonus points, but pass too quickly for zero risk reward!',
             config: `
                 <div class="config-item"><label>Fuse Min (s)</label><input type="number" id="m4-min" value="10" min="3" max="60" step="1"></div>
                 <div class="config-item"><label>Fuse Max (s)</label><input type="number" id="m4-max" value="25" min="4" max="90" step="1"></div>
@@ -607,8 +607,20 @@
         players.forEach((p, i) => { p.active = i < playerCount; });
     }
 
-    function getPts(diff, maxPts = 1000, decayRate = 1.5) {
-        const score = Math.round(maxPts * Math.exp(-diff / (decayRate * 1000)));
+    function getPts(diff, maxPts = 1000, decayRate = 1.5, playerId = null) {
+        // Rubber-banding: players in last place get a more forgiving decay rate
+        let adjustedDecay = decayRate;
+        if (playerId != null && playerCount > 1) {
+            const pool = realActivePlayers();
+            const maxScore = Math.max(...pool.map(p => p.score), 0);
+            const myScore = (pool.find(p => p.id === playerId) || {}).score || 0;
+            if (maxScore > 0) {
+                const deficit = (maxScore - myScore) / maxScore; // 0 = leading, 1 = far behind
+                // Up to 60% more forgiving decay for last place players
+                adjustedDecay = decayRate * (1 + deficit * 0.6);
+            }
+        }
+        const score = Math.round(maxPts * Math.exp(-diff / (adjustedDecay * 1000)));
         let label, color;
         if (score >= 900) { label = 'PERFECT'; color = 'var(--warn)'; }
         else if (score >= 600) { label = 'GREAT'; color = 'var(--success)'; }
@@ -981,6 +993,7 @@
         hap([20]); snd('tap');
 
         if (currentMode === 2) return precisionHit(pId);
+        if (currentMode === 1) return predictTapHit(pId);
         if (currentMode === 3) return relayHit(pId);
         if (currentMode === 4) return bombHit(pId);
         if (currentMode === 5) return zenithHit(pId);
@@ -1043,10 +1056,20 @@
                     hbEl.style.display = 'none';
                     hbEl.classList.remove('heartbeat-pulse');
                     if (modeData.heartbeatAc) { try { modeData.heartbeatAc.close(); } catch(e){} }
-                    gs = STATE.GUESSING;
+                    // Tap-to-lock: show a running counter, players tap to lock their guess
+                    gs = STATE.RUNNING;
                     modeData.guesses = {};
                     modeData.lockedCount = 0;
-                    showSimultaneousGuessUI();
+                    modeData.guessStart = performance.now();
+                    display.className = 'stopwatch-display running';
+                    showToast('TAP when the counter matches!', 'var(--success)');
+                    renderArena(ids);
+                    updateKbHint();
+                    liveDisplay(() => {
+                        if (modeData.lockedCount >= realActivePlayers().length) return false;
+                        const guessElapsed = performance.now() - modeData.guessStart;
+                        display.textContent = fmt(guessElapsed);
+                    });
                     return false;
                 }
             });
@@ -1112,6 +1135,8 @@
             modeData.holdStart = performance.now();
             modeData.riskTime = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.holdUnlocked = false;
+            // Randomize min hold slightly each turn (+/- 30%)
+            modeData.baseMinHold = modeData.minHold;
             display.className = 'stopwatch-display danger';
             display.textContent = 'BOMB';
             renderArena(ids, p => `Pass to ${KEYS[p.id - 1].toUpperCase()}`, () => 'PASS');
@@ -1394,6 +1419,21 @@
         if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
     }
 
+    function predictTapHit(pId) {
+        if (modeData.guesses?.[pId] != null) return;
+        if (!modeData.guessStart) return;
+        const guessElapsed = performance.now() - modeData.guessStart;
+        modeData.guesses[pId] = guessElapsed;
+        modeData.lockedCount += 1;
+        const btn = el(`btn-p${pId}`);
+        btn.disabled = true; btn.classList.add('done');
+        el(`stat-p${pId}`).textContent = 'LOCKED';
+        snd('tap'); hap([20]);
+        if (modeData.lockedCount >= realActivePlayers().length) {
+            addTimeout(endRound, 400);
+        }
+    }
+
     function zenithHit(pId) {
         if (modeData.hits?.[pId] != null) return;
         const elapsed = performance.now() - startTime;
@@ -1532,7 +1572,7 @@
         if (pId !== modeData.currId) return;
         const elapsed = performance.now() - startTime;
         const diff = Math.abs(modeData.currTarget - elapsed);
-        const res = getPts(diff, 1000, 0.6);
+        const res = getPts(diff, 1000, 0.6, pId);
         modeData.scores[pId] += res.p;
         modeData.turns.push({ pId, elapsed, diff, res, target: modeData.currTarget });
         const stat = el(`stat-p${pId}`);
@@ -1550,6 +1590,9 @@
         const holderId = modeData.alive[modeData.holderIdx];
         modeData.holdStart = performance.now();
         modeData.holdUnlocked = false;
+        // Randomize min hold each turn (+/- 30% of base)
+        const variance = modeData.baseMinHold * 0.3;
+        modeData.minHold = modeData.baseMinHold + (Math.random() * 2 - 1) * variance;
         modeData.alive.forEach(id => {
             const btn = el(`btn-p${id}`);
             if (!btn) return;
@@ -1626,10 +1669,17 @@
             const survived = p.id !== loserId;
             const passes = modeData.passCounts[p.id] || 0;
             const riskMs = modeData.riskTime[p.id] || 0;
-            const riskPts = modeData.riskBonus ? Math.round(riskMs / 10) : 0;
+            // Exponential risk bonus: points multiply the longer you hold
+            // Penalize hot-potato: if total extra hold < 500ms, no risk bonus
+            let riskPts = 0;
+            if (modeData.riskBonus && survived && riskMs > 500) {
+                // Exponential: base 1.5^(seconds held beyond minimum)
+                const riskSeconds = riskMs / 1000;
+                riskPts = Math.round(50 * Math.pow(1.8, riskSeconds));
+            }
             const pts = survived ? 200 + passes * 50 + riskPts : 0;
             p.score += pts;
-            const riskLabel = modeData.riskBonus && survived ? `<div style="font-size:0.7rem;opacity:0.8">Risk: ${(riskMs / 1000).toFixed(1)}s (+${riskPts})</div>` : '';
+            const riskLabel = modeData.riskBonus && survived ? `<div style="font-size:0.7rem;opacity:0.8">Risk: ${(riskMs / 1000).toFixed(1)}s (+${riskPts}${riskMs <= 500 ? ' — too safe!' : ''})</div>` : '';
             html += `
                 <div class="res-card">
                     <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
@@ -1733,13 +1783,13 @@
             realActivePlayers().forEach(p => {
                 const guess = modeData.guesses[p.id];
                 const diff = guess == null ? Infinity : Math.abs(modeData.actual - guess);
-                const res = guess == null ? { p: 0, l: 'MISS', c: 'var(--danger)' } : getPts(diff);
+                const res = guess == null ? { p: 0, l: 'MISS', c: 'var(--danger)' } : getPts(diff, 1000, 1.5, p.id);
                 p.score += res.p;
                 html += `
                     <div class="res-card">
                         <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
                         <div class="res-val">${guess == null ? '--' : `${fmt(guess)}s`}</div>
-                        <div class="res-note">${guess == null ? 'No guess submitted' : `Off by ${fmt(diff)}s`}</div>
+                        <div class="res-note">${guess == null ? 'No guess submitted' : `Off by ${fmt(Math.abs(modeData.actual - guess))}s`}</div>
                         <div class="res-pts" style="color:${res.c}">${res.l} (+${res.p})</div>
                     </div>`;
             });
@@ -1776,7 +1826,7 @@
             realActivePlayers().forEach(p => {
                 const hit = modeData.hits[p.id];
                 const diff = hit == null ? Infinity : Math.abs(target - hit);
-                let res = hit == null ? { p: 0, l: 'MISS', c: 'var(--danger)' } : getPts(diff);
+                let res = hit == null ? { p: 0, l: 'MISS', c: 'var(--danger)' } : getPts(diff, 1000, 1.5, p.id);
                 if (currentMode === 5 && hit != null && hit > target) res = { p: 0, l: 'BUST', c: 'var(--danger)' };
                 p.score += res.p;
                 html += `
