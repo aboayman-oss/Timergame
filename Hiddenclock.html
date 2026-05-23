@@ -1139,22 +1139,22 @@
         resultPanel.classList.remove('show');
         arena.classList.add('hidden');
         let count = 3;
-        display.className = 'stopwatch-display cd-pop';
-        display.textContent = '03.000';
-        showToast('Get ready...');
-        snd('tick'); hap([15]);
+        display.className = 'stopwatch-display small';
+        display.textContent = '3';
+        showToast('GET READY');
+        snd('tick'); hap([12]);
         const tick = () => {
             count -= 1;
             if (count > 0) {
-                display.className = 'stopwatch-display';
+                display.className = 'stopwatch-display small';
                 void display.offsetWidth;
-                display.className = 'stopwatch-display cd-pop';
-                display.textContent = `0${count}.000`;
-                snd('tick'); hap([15]);
+                display.classList.add('cd-pop');
+                display.textContent = String(count);
+                showToast('GET READY');
+                snd('tick'); hap([12]);
                 addTimeout(tick, 1000);
             } else {
-                display.className = 'stopwatch-display running';
-                snd('go'); hap([10, 30, 50]);
+                snd('go'); hap([10, 25, 40]);
                 onComplete();
             }
         };
