@@ -564,12 +564,11 @@
                     Advanced Settings
                 </div>
                 <div class="advanced-section">
-                    <div class="config-item"><label>Min Hold (s)</label><input type="number" id="m4-hold" value="1.0" min="0.5" max="5.0" step="0.1"></div>
                     <div class="config-item config-full">
                         <label>Risk Bonus</label>
                         <div class="config-toggle"><span>Bonus for holding longer</span><label class="toggle"><input type="checkbox" id="m4-risk" checked><span class="toggle-track"></span></label></div>
                     </div>
-                    <div class="config-note">Hold the bomb for the minimum time before passing. The fuse length is random and hidden!</div>
+                    <div class="config-note">Fuse scales dynamically with player count. Surges fake you out — Sensory Overload punishes greed!</div>
                 </div>`
         },
         5: {
@@ -666,9 +665,9 @@
             hard: { 'm3-int': 1.5, 'm3-laps': 4 }
         },
         4: {
-            easy: { 'm4-hold': 1.0 },
-            medium: { 'm4-hold': 2.0 },
-            hard: { 'm4-hold': 3.0 }
+            easy: { baseBuffer: 3.5, varMin: 1.5, varMax: 4.0, surgeCount: 1, surgeIntensity: 0.6 },
+            medium: { baseBuffer: 2.5, varMin: 1.0, varMax: 3.0, surgeCount: 2, surgeIntensity: 0.85 },
+            hard: { baseBuffer: 1.5, varMin: 0.5, varMax: 1.5, surgeCount: 3, surgeIntensity: 0.98 }
         },
         5: {
             easy: { 'm5-tgt': 15 },
@@ -1392,25 +1391,48 @@
                 addTimeout(resetUI, 900);
                 return;
             }
-            // Fuse is always random 8-30s, hidden from players (no config exposed)
-            modeData.fuse = rand(8000, 30000);
+            // Determine active preset
+            const activeBtn = el('config-area')?.querySelector('.preset-btn.active');
+            const presetKey = activeBtn?.dataset?.preset || 'easy';
+            const preset = MODE_PRESETS[4][presetKey];
+
+            // Dynamic fuse calculation scaled by player count
+            const fuseBase = playerCount * preset.baseBuffer * 1000;
+            const fuseVar = rand(playerCount * preset.varMin * 1000, playerCount * preset.varMax * 1000);
+            modeData.fuse = fuseBase + fuseVar;
+
             modeData.alive = ids.slice();
             modeData.holderIdx = Math.floor(Math.random() * modeData.alive.length);
             modeData.passCounts = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.locked = null;
-            modeData.minHold = (parseFloat(el('m4-hold')?.value) || 2.0) * 1000;
+            // Min hold per turn: 1.5s base, randomized each turn in bombSetTurn
+            modeData.minHold = 1500;
+            modeData.baseMinHold = 1500;
             modeData.riskBonus = el('m4-risk')?.checked !== false;
             modeData.holdStart = performance.now();
             modeData.riskTime = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.holdUnlocked = false;
-            // Randomize min hold slightly each turn (+/- 30%)
-            modeData.baseMinHold = modeData.minHold;
-            // Pass rotation: track last passer to enforce cooldown in 3+ player games
             modeData.lastPasser = null;
             modeData.lastReceiver = null;
-            // Haptic/visual randomization: pick random thresholds so feedback is unpredictable
-            modeData.hapticSeed = 0.2 + Math.random() * 0.4; // random start between 20-60% of fuse
-            modeData.hapticFreq = 0.03 + Math.random() * 0.07; // random haptic probability factor
+
+            // Generate Surge events (fake warnings) — random time windows during the fuse
+            const surges = [];
+            const surgeDuration = 1200; // ms per surge event
+            for (let i = 0; i < preset.surgeCount; i++) {
+                // Place surges in the middle 70% of the fuse (10%-80% range), avoiding overlap
+                const earliest = modeData.fuse * 0.10;
+                const latest = modeData.fuse * 0.80 - surgeDuration;
+                let surgeStart;
+                let attempts = 0;
+                do {
+                    surgeStart = rand(earliest, latest);
+                    attempts++;
+                } while (attempts < 50 && surges.some(s => Math.abs(s.start - surgeStart) < surgeDuration * 2));
+                surges.push({ start: surgeStart, duration: surgeDuration, peak: preset.surgeIntensity });
+            }
+            modeData.surges = surges;
+            modeData.surgeIntensity = preset.surgeIntensity;
+
             display.className = 'stopwatch-display danger';
             display.textContent = 'BOMB';
             renderArena(ids, p => `Pass to ${KEYS[p.id - 1].toUpperCase()}`, () => 'PASS');
@@ -1419,9 +1441,9 @@
             updateKbHint();
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
-                const pct = elapsed / modeData.fuse;
                 const now = performance.now();
                 const holdElapsed = now - modeData.holdStart;
+                const holdDuration = holdElapsed;
                 const holdRemaining = Math.max(0, modeData.minHold - holdElapsed);
 
                 if (now < (modeData.passFlashUntil || 0)) {
@@ -1437,16 +1459,51 @@
                     bombUnlockPass();
                 }
 
-                // Unpredictable tension feedback: randomized thresholds per round
                 const gc = el('game-container');
-                if (pct > modeData.hapticSeed) {
-                    // Intensity ramps but starts from a random point — players can't pinpoint exact time
-                    const intensity = Math.min(1, (pct - modeData.hapticSeed) / (1 - modeData.hapticSeed));
-                    gc.style.background = `rgba(${Math.round(180 + 75 * intensity)}, ${Math.round(30 * (1 - intensity))}, ${Math.round(30 * (1 - intensity))}, ${0.05 + intensity * 0.15})`;
-                    if (Math.random() < modeData.hapticFreq * intensity) {
-                        hap([Math.round(15 + Math.random() * 40)]);
+                const extraHold = Math.max(0, holdDuration - modeData.minHold);
+
+                // Option 3: Sensory Overload — punish greedy holding past minHold
+                if (extraHold > 0 && modeData.holdUnlocked) {
+                    // Full red + continuous max haptics to blind the player
+                    gc.style.background = `rgba(255, 10, 10, 0.98)`;
+                    if (Math.random() < 0.3) {
+                        hap([30]);
+                    }
+                } else {
+                    // Surge System: fake warnings to deceive players
+                    let surgeLevel = 0;
+                    for (const surge of modeData.surges) {
+                        const surgeElapsed = elapsed - surge.start;
+                        if (surgeElapsed >= 0 && surgeElapsed <= surge.duration) {
+                            // Ramp up first half, ramp down second half
+                            const half = surge.duration / 2;
+                            const progress = surgeElapsed <= half
+                                ? surgeElapsed / half
+                                : 1 - (surgeElapsed - half) / half;
+                            surgeLevel = Math.max(surgeLevel, progress * surge.peak);
+                        }
+                    }
+
+                    // True baseline: gentle ramp based on fuse progress
+                    const pct = elapsed / modeData.fuse;
+                    const trueIntensity = pct * 0.3; // subtle linear ramp
+
+                    // Combined intensity: max of true baseline and surge
+                    const intensity = Math.max(trueIntensity, surgeLevel);
+
+                    if (intensity > 0.02) {
+                        const r = Math.round(180 + 75 * intensity);
+                        const gb = Math.round(30 * (1 - intensity));
+                        gc.style.background = `rgba(${r}, ${gb}, ${gb}, ${0.05 + intensity * 0.2})`;
+                        // Haptic triggers scale with intensity
+                        if (Math.random() < 0.04 * intensity) {
+                            hap([Math.round(15 + 40 * intensity)]);
+                        }
+                    } else {
+                        gc.style.background = '';
                     }
                 }
+
                 if (elapsed >= modeData.fuse) {
                     gc.style.background = '';
                     bombExplode();
@@ -1886,20 +1943,37 @@
         const btn = el(`btn-p${loserId}`);
         if (btn) btn.classList.add('eliminated');
 
+        // Balanced scoring:
+        // - Survivors share a pool proportional to their passes (contribution-based)
+        // - Risk bonus uses diminishing returns (sqrt scaling) to prevent greed exploits
+        // - Minimum participation bonus for survivors who touched the bomb at least once
+        const survivors = realActivePlayers().filter(p => p.id !== loserId);
+        const totalPasses = survivors.reduce((sum, p) => sum + (modeData.passCounts[p.id] || 0), 0);
+
         let html = `<div style="color:var(--danger);font-size:1.2rem;font-weight:900;margin-bottom:10px;">${safe(loser.name)} exploded!</div><div class="result-grid">`;
         realActivePlayers().forEach(p => {
             const survived = p.id !== loserId;
             const passes = modeData.passCounts[p.id] || 0;
             const riskMs = modeData.riskTime[p.id] || 0;
-            // Scoring: survivors get base points + pass bonus + risk bonus
-            // Risk bonus uses capped time (max 3s/turn) to prevent exploit
+
+            let pts = 0;
             let riskPts = 0;
-            if (modeData.riskBonus && survived && riskMs > 500) {
-                // Linear scaling: 30 points per second of risk held (capped per turn)
-                const riskSeconds = riskMs / 1000;
-                riskPts = Math.round(30 * riskSeconds);
+            if (survived) {
+                // Base survival: 80 pts
+                pts = 80;
+                // Contribution bonus: share 120 pts proportionally among survivors by passes
+                if (totalPasses > 0 && passes > 0) {
+                    pts += Math.round(120 * (passes / totalPasses));
+                }
+                // Risk bonus: diminishing returns via sqrt scaling
+                // sqrt(seconds) * 40 — rewards risk but caps exponential gain
+                if (modeData.riskBonus && riskMs > 500) {
+                    const riskSeconds = riskMs / 1000;
+                    riskPts = Math.round(40 * Math.sqrt(riskSeconds));
+                }
+                pts += riskPts;
             }
-            const pts = survived ? 100 + passes * 40 + riskPts : 0;
+
             p.score += pts;
             const riskLabel = modeData.riskBonus && survived ? `<div style="font-size:0.7rem;opacity:0.8">Risk: ${(riskMs / 1000).toFixed(1)}s (+${riskPts}${riskMs <= 500 ? ' \u2014 too safe!' : ''})</div>` : '';
             html += `
