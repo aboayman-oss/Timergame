@@ -128,6 +128,7 @@
             background: var(--surface); border: 1px solid var(--border);
             border-radius: var(--radius-lg); padding: 18px;
             box-shadow: 0 8px 40px rgba(0,0,0,0.6); position: relative;
+            touch-action: none;
         }
 
         .config-area {
@@ -185,7 +186,7 @@
             background: var(--surface2); border: 2px solid var(--border); color: var(--text);
             border-radius: var(--radius); padding: 16px 8px; cursor: pointer;
             display: flex; flex-direction: column; align-items: center; gap: 6px;
-            transition: all 0.1s; position: relative; overflow: hidden; touch-action: manipulation;
+            transition: all 0.1s; position: relative; overflow: hidden; touch-action: none;
             min-height: 90px; justify-content: center;
         }
         .player-btn.active { border-color: currentColor; box-shadow: 0 0 15px currentColor; transform: scale(1.02); }
@@ -629,10 +630,19 @@
         return { p: score, l: label, c: color };
     }
 
+    let _audioCtx = null;
+    function getAudioCtx() {
+        if (!_audioCtx || _audioCtx.state === 'closed') {
+            _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (_audioCtx.state === 'suspended') _audioCtx.resume();
+        return _audioCtx;
+    }
+
     function snd(type) {
         if (!el('s-sound').checked) return;
         try {
-            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const ac = getAudioCtx();
             const t = ac.currentTime;
             const play = (f, d, w='sine', v=0.2, dt=0) => {
                 const o = ac.createOscillator(), g = ac.createGain();
@@ -650,7 +660,6 @@
                 exp: () => play(100, 0.5, 'square', 0.3)
             };
             if (map[type]) map[type]();
-            setTimeout(() => ac.close(), 1000);
         } catch (e) {}
     }
     function hap(pat = [30]) { if (el('s-haptic').checked && navigator.vibrate) navigator.vibrate(pat); }
@@ -1030,7 +1039,7 @@
             hbEl.classList.add('heartbeat-pulse');
             modeData.heartbeatAc = null;
             try {
-                const ac = new (window.AudioContext || window.webkitAudioContext)();
+                const ac = getAudioCtx();
                 modeData.heartbeatAc = ac;
                 const osc = ac.createOscillator();
                 const gain = ac.createGain();
@@ -1055,7 +1064,8 @@
                     snd('bad');
                     hbEl.style.display = 'none';
                     hbEl.classList.remove('heartbeat-pulse');
-                    if (modeData.heartbeatAc) { try { modeData.heartbeatAc.close(); } catch(e){} }
+                    if (modeData.heartbeatOsc) { try { modeData.heartbeatOsc.stop(); } catch(e){} }
+                    if (modeData.heartbeatLfo) { try { modeData.heartbeatLfo.stop(); } catch(e){} }
                     // Tap-to-lock: show a running counter, players tap to lock their guess
                     gs = STATE.RUNNING;
                     modeData.guesses = {};
@@ -1552,7 +1562,7 @@
             }
         });
         try {
-            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const ac = getAudioCtx();
             const o = ac.createOscillator();
             const g = ac.createGain();
             const pan = ac.createStereoPanner();
@@ -1563,7 +1573,6 @@
             g.gain.setValueAtTime(0.15, ac.currentTime);
             g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.2);
             o.start(); o.stop(ac.currentTime + 0.25);
-            setTimeout(() => ac.close(), 500);
         } catch(e) {}
         hap([40, 20, 40]);
     }
@@ -1845,27 +1854,25 @@
             display.className = 'stopwatch-display';
             display.textContent = 'RESULTS';
             const validHits = realActivePlayers().filter(p => modeData.hits[p.id] != null && !modeData.misfires[p.id]);
-            let winnerId = null;
-            let bestTime = Infinity;
-            validHits.forEach(p => {
-                if (modeData.hits[p.id] < bestTime) {
-                    bestTime = modeData.hits[p.id];
-                    winnerId = p.id;
-                }
-            });
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Quick Draw — Winner Takes All</div><div class="result-grid">`;
+            // Sort valid hits by speed (fastest first) for tiered scoring
+            const ranked = validHits.slice().sort((a, b) => modeData.hits[a.id] - modeData.hits[b.id]);
+            const tierPoints = [1000, 700, 400, 200, 100];
+            const rankMap = {};
+            ranked.forEach((p, i) => { rankMap[p.id] = tierPoints[i] || 0; });
+            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Quick Draw — Tiered Scoring</div><div class="result-grid">`;
             realActivePlayers().forEach(p => {
                 const misfired = !!modeData.misfires[p.id];
                 const hit = modeData.hits[p.id];
-                const isWinner = p.id === winnerId;
-                const pts = isWinner ? 1000 : 0;
+                const pts = misfired || hit == null ? 0 : (rankMap[p.id] || 0);
                 p.score += pts;
+                const rank = ranked.findIndex(r => r.id === p.id);
                 let label = misfired ? 'MISFIRE' : (hit == null ? 'NO TAP' : `${hit.toFixed(0)}ms`);
+                const rankLabel = pts > 0 ? (rank === 0 ? '1st' : rank === 1 ? '2nd' : rank === 2 ? '3rd' : `${rank + 1}th`) : '';
                 html += `
                     <div class="res-card">
                         <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
                         <div class="res-val">${label}</div>
-                        <div class="res-pts ${pts === 0 ? 'zero' : ''}">${isWinner ? 'WINNER +1000' : '+0'}</div>
+                        <div class="res-pts ${pts === 0 ? 'zero' : ''}">${rankLabel ? rankLabel + ' ' : ''}+${pts}</div>
                     </div>`;
             });
             html += `</div>`;
@@ -1877,28 +1884,26 @@
             display.textContent = 'RESULTS';
             display.style.color = '';
             const validHits = realActivePlayers().filter(p => modeData.hits[p.id] != null && !modeData.misfires[p.id]);
-            let winnerId = null;
-            let bestTime = Infinity;
-            validHits.forEach(p => {
-                if (modeData.hits[p.id] < bestTime) {
-                    bestTime = modeData.hits[p.id];
-                    winnerId = p.id;
-                }
-            });
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Reflex — Winner Takes All</div><div class="result-grid">`;
+            // Sort valid hits by speed (fastest first) for tiered scoring
+            const ranked = validHits.slice().sort((a, b) => modeData.hits[a.id] - modeData.hits[b.id]);
+            const tierPoints = [1000, 700, 400, 200, 100];
+            const rankMap = {};
+            ranked.forEach((p, i) => { rankMap[p.id] = tierPoints[i] || 0; });
+            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Reflex — Tiered Scoring</div><div class="result-grid">`;
             realActivePlayers().forEach(p => {
                 const misfired = !!modeData.misfires[p.id];
                 const hit = modeData.hits[p.id];
-                const isWinner = p.id === winnerId;
-                const pts = isWinner ? 1000 : 0;
+                const pts = misfired || hit == null ? 0 : (rankMap[p.id] || 0);
                 p.score += pts;
+                const rank = ranked.findIndex(r => r.id === p.id);
                 let label = misfired ? 'EARLY — DQ' : (hit == null ? 'NO TAP' : `${hit.toFixed(0)}ms`);
+                const rankLabel = pts > 0 ? (rank === 0 ? '1st' : rank === 1 ? '2nd' : rank === 2 ? '3rd' : `${rank + 1}th`) : '';
                 html += `
                     <div class="res-card">
                         <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
                         <div class="res-val">${label}</div>
-                        <div class="res-note">${misfired ? 'DISQUALIFIED' : (isWinner ? 'Fastest!' : '')}</div>
-                        <div class="res-pts ${pts === 0 ? 'zero' : ''}">${isWinner ? 'WINNER +1000' : '+0'}</div>
+                        <div class="res-note">${misfired ? 'DISQUALIFIED' : (rankLabel ? rankLabel + ' — ' + (rank === 0 ? 'Fastest!' : '') : '')}</div>
+                        <div class="res-pts ${pts === 0 ? 'zero' : ''}">${rankLabel ? rankLabel + ' ' : ''}+${pts}</div>
                     </div>`;
             });
             html += `</div>`;
