@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Hidden Clock — Master Edition</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap');
+
+        :root {
+            --bg:          #07090f;
+            --surface:     #0d1117;
+            --surface2:    #141b27;
+            --border:      #1d2840;
+            
+            /* Player Colors */
+            --p1: #00d4ff; --p1-dim: rgba(0,212,255,0.15);
+            --p2: #a78bfa; --p2-dim: rgba(167,139,250,0.15);
+            --p3: #00ff87; --p3-dim: rgba(0,255,135,0.15);
+            --p4: #ffbe00; --p4-dim: rgba(255,190,0,0.15);
+            --p5: #ff3366; --p5-dim: rgba(255,51,102,0.15);
+            
+            --success:     #00ff87;
+            --warn:        #ffbe00;
+            --danger:      #ff3366;
+            --text:        #e8f0fe;
+            --text-dim:    #6b7fa3;
+            --text-dimmer: #2e3f5c;
+            --radius:      12px;
+            --radius-lg:   20px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overscroll-behavior-y: contain; }
+
+        body {
+            font-family: 'Exo 2', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 14px 14px 40px;
+            overflow-x: hidden;
+        }
+
+        /* ── HEADER & TABS ────────────────────────── */
+        .header {
+            width: 100%; max-width: 500px;
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .game-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(1.2rem, 5vw, 1.5rem); font-weight: 900;
+            background: linear-gradient(90deg, var(--p1), var(--p2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(0,212,255,0.2); letter-spacing: 0.05em;
+        }
+        .icon-btn {
+            background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim);
+            width: 42px; height: 42px; border-radius: 10px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+            transition: all 0.2s; touch-action: manipulation;
+        }
+        .icon-btn:hover, .icon-btn:active { background: var(--p1-dim); color: var(--p1); border-color: var(--p1); }
+
+        .tabs-container {
+            width: 100%; max-width: 500px; overflow-x: auto;
+            margin-bottom: 12px; padding-bottom: 4px;
+            scrollbar-width: none; /* Firefox */
+        }
+        .tabs-container::-webkit-scrollbar { display: none; }
+        .tabs {
+            display: flex; gap: 6px; width: max-content;
+            transition: opacity 0.3s;
+        }
+        .tabs.hidden-play { opacity: 0; pointer-events: none; height: 0; overflow: hidden; margin: 0; }
+        .tab-btn {
+            background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border);
+            padding: 10px 14px; border-radius: 10px; cursor: pointer;
+            font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 0.85rem;
+            transition: all 0.2s; touch-action: manipulation; display: flex; flex-direction: column; align-items: center;
+        }
+        .tab-btn.active { background: var(--p1-dim); color: var(--p1); border-color: var(--p1); }
+        .tab-btn small { opacity: 0.65; font-weight: 400; font-size: 0.75rem; margin-top: 2px; }
+
+        /* ── SCOREBOARD ─────────────────────── */
+        .scoreboard {
+            width: 100%; max-width: 500px;
+            display: flex; justify-content: space-evenly; flex-wrap: wrap; gap: 8px;
+            margin-bottom: 10px;
+        }
+        .score-card {
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: 8px; padding: 6px 12px; text-align: center;
+            min-width: 80px; flex: 1; transition: transform 0.2s;
+        }
+        .score-name { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+        .score-pts { font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 900; }
+        
+        /* ── MAIN CONTAINER ─────────────────── */
+        .game-container {
+            width: 100%; max-width: 500px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 18px;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.6); position: relative;
+        }
+
+        /* ── CONFIG AREA ────────────────────── */
+        .config-area {
+            background: var(--surface2); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 14px; margin-bottom: 14px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+        }
+        .config-full { grid-column: span 2; }
+        .config-item { display: flex; flex-direction: column; gap: 5px; }
+        .config-item label { font-size: 0.68rem; color: var(--text-dim); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+        .config-item input, .config-item select {
+            background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            padding: 11px 10px; border-radius: 8px; font-family: 'Orbitron', sans-serif; font-size: 1rem; text-align: center;
+            width: 100%; transition: border-color 0.2s; appearance: none;
+        }
+        .config-item input:focus, .config-item select:focus { outline: none; border-color: var(--p1); box-shadow: 0 0 0 2px var(--p1-dim); }
+
+        /* ── DISPLAY ────────────────────────── */
+        .status-text {
+            font-size: clamp(0.85rem, 3vw, 0.95rem); font-weight: 600; text-align: center;
+            min-height: 26px; color: var(--success); transition: color 0.3s; margin-bottom: 4px;
+        }
+        .stopwatch-display {
+            font-family: 'Orbitron', sans-serif; font-size: clamp(3rem, 12vw, 4.5rem); font-weight: 900;
+            letter-spacing: 2px; text-align: center; margin: 6px 0 18px; color: var(--text);
+            text-shadow: 0 0 20px rgba(232,240,254,0.1); line-height: 1; transition: all 0.2s;
+        }
+        .stopwatch-display.running { color: var(--p1); text-shadow: 0 0 30px var(--p1-dim); }
+        .stopwatch-display.hidden-timer { opacity: 0.1; filter: blur(4px); }
+        .stopwatch-display.danger { color: var(--danger); text-shadow: 0 0 30px var(--danger-dim); animation: pulseDanger 0.5s infinite alternate; }
+        .stopwatch-display.cd-pop { animation: cdPop 0.38s cubic-bezier(0.175,0.885,0.32,1.275); }
+        
+        @keyframes pulseDanger { from { transform: scale(1); } to { transform: scale(1.05); } }
+        @keyframes cdPop { from { transform:scale(0.45); opacity:0.2; } to { transform:scale(1); opacity:1; } }
+
+        /* ── ARENA (PLAYERS) ────────────────── */
+        .arena {
+            display: grid; gap: 10px; margin-top: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        }
+        .arena.hidden { display: none; }
+        .player-btn {
+            background: var(--surface2); border: 2px solid var(--border); color: var(--text);
+            border-radius: var(--radius); padding: 16px 8px; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+            transition: all 0.1s; position: relative; overflow: hidden; touch-action: manipulation;
+            min-height: 90px; justify-content: center;
+        }
+        .player-btn.active { border-color: currentColor; box-shadow: 0 0 15px currentColor; transform: scale(1.02); }
+        .player-btn:active:not(:disabled) { transform: scale(0.95); }
+        .player-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+        .player-btn.eliminated { opacity: 0.2; filter: grayscale(1); }
+        .player-btn.done { border-color: var(--text-dim); background: var(--bg); }
+        
+        .pb-name { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; z-index: 2; pointer-events: none; }
+        .pb-stat { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; font-weight: 900; z-index: 2; pointer-events: none; }
+        .pb-sub  { font-size: 0.6rem; opacity: 0.6; z-index: 2; pointer-events: none; }
+
+        /* ── GUESS AREA (MODE 1) ────────────── */
+        .guess-stage {
+            background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 16px; margin-top: 10px; text-align: center; display: none;
+        }
+        .guess-stage.show { display: block; animation: cdPop 0.3s; }
+        .guess-input {
+            width: 100%; max-width: 200px; background: var(--bg); border: 1px solid var(--border);
+            color: var(--text); padding: 14px; border-radius: 8px; font-family: 'Orbitron', sans-serif;
+            font-size: 1.3rem; text-align: center; margin: 10px auto; display: block;
+        }
+
+        /* ── BUTTONS ────────────────────────── */
+        .btn {
+            background: var(--text); color: var(--bg); border: none; padding: 16px;
+            font-size: 1.05rem; font-weight: 700; font-family: 'Exo 2', sans-serif;
+            border-radius: var(--radius); cursor: pointer; letter-spacing: 0.05em;
+            touch-action: manipulation; transition: transform 0.08s, box-shadow 0.2s;
+            position: relative; overflow: hidden; width: 100%; text-transform: uppercase;
+        }
+        .btn:active { transform: scale(0.96); }
+        .btn-primary { background: var(--p1); color: #000; }
+        .btn-primary:hover { box-shadow: 0 0 20px var(--p1-dim); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        
+        .ripple { position:absolute; border-radius:50%; transform:scale(0); animation:rippleAnim 0.5s linear; background:rgba(255,255,255,0.25); pointer-events:none; }
+        @keyframes rippleAnim { to { transform:scale(4); opacity:0; } }
+
+        /* ── RESULTS PANEL ──────────────────── */
+        .result-panel {
+            margin-top: 14px; padding: 16px; background: var(--surface2);
+            border: 1px solid var(--border); border-radius: var(--radius);
+            font-size: 0.9rem; text-align: center; display: none;
+        }
+        .result-panel.show { display: block; animation: cdPop 0.4s; }
+        .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+        .res-card { background: var(--bg); padding: 10px; border-radius: 8px; border: 1px solid var(--border); }
+        .res-name { font-weight: 700; font-size: 0.8rem; margin-bottom: 4px; }
+        .res-val { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; font-weight: 900; }
+        .res-pts { color: var(--success); font-size: 0.75rem; font-weight: 700; margin-top: 4px; }
+        .res-pts.zero { color: var(--danger); }
+
+        /* ── SETTINGS MODAL ─────────────────── */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px);
+            z-index: 200; display: flex; align-items: flex-end; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-backdrop.open { opacity: 1; pointer-events: all; }
+        .modal-sheet {
+            width: 100%; max-width: 500px; background: var(--surface); border: 1px solid var(--border);
+            border-top-left-radius: var(--radius-lg); border-top-right-radius: var(--radius-lg);
+            padding: 22px 22px 40px; transform: translateY(100%); transition: transform 0.35s;
+            max-height: 85vh; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
+        }
+        .modal-backdrop.open .modal-sheet { transform: translateY(0); }
+        .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 10px; }
+        
+        .settings-group { background: var(--surface2); padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+        .settings-title { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; margin-bottom: 10px; letter-spacing: 0.05em; }
+        
+        .player-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .p-color-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+        .player-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 6px; font-family: 'Exo 2', sans-serif; }
+        
+        .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-track { position: absolute; inset: 0; background: var(--border); border-radius: 12px; cursor: pointer; transition: 0.3s; }
+        .toggle-track::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: var(--text-dim); border-radius: 50%; transition: 0.3s; }
+        .toggle input:checked + .toggle-track { background: var(--p1-dim); border: 1px solid var(--p1); }
+        .toggle input:checked + .toggle-track::before { transform: translateX(20px); background: var(--p1); }
+
+        .kb-hint { font-size: 0.7rem; color: var(--text-dimmer); text-align: center; margin-top: 10px; }
+        .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%,90%{transform:translate3d(-2px,0,0)} 20%,80%{transform:translate3d(4px,0,0)} 30%,50%,70%{transform:translate3d(-6px,0,0)} 40%,60%{transform:translate3d(6px,0,0)} }
+
+        /* PARTICLES */
+        .particles { position: fixed; inset: 0; pointer-events: none; z-index: 100; overflow: hidden; }
+        .particle { position: absolute; border-radius: 50%; animation: pDrop 1.5s ease-in forwards; }
+        @keyframes pDrop { 0% { opacity:1; transform: translateY(0) scale(1); } 100% { opacity:0; transform: translateY(80vh) scale(0); } }
+
+        @media (max-width: 400px) {
+            .game-container { padding: 14px; }
+            .stopwatch-display { font-size: 2.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="game-title">⏱ HIDDEN CLOCK</div>
+        <button class="icon-btn" onclick="openSettings()">⚙️</button>
+    </div>
+
+    <div class="tabs-container" id="tabs-container">
+        <div class="tabs" id="mode-tabs">
+            <button class="tab-btn active" onclick="setMode(1)">M1<small>Predict</small></button>
+            <button class="tab-btn" onclick="setMode(2)">M2<small>Precision</small></button>
+            <button class="tab-btn" onclick="setMode(3)">M3<small>Relay</small></button>
+            <button class="tab-btn" onclick="setMode(4)">M4<small>Bomb</small></button>
+            <button class="tab-btn" onclick="setMode(5)">M5<small>Zenith</small></button>
+            <button class="tab-btn" onclick="setMode(6)">M6<small>Echo</small></button>
+        </div>
+    </div>
+
+    <div class="scoreboard" id="scoreboard"></div>
+
+    <div class="game-container" id="game-container">
+        
+        <div id="config-area" class="config-area"></div>
+
+        <div class="status-text" id="status-text">Ready to play!</div>
+        <div class="stopwatch-display" id="display">00.000</div>
+
+        <div class="guess-stage" id="guess-stage">
+            <h3 id="guess-prompt" style="color:var(--text-dim);font-size:0.8rem;text-transform:uppercase;margin-bottom:8px;">P1 Guess</h3>
+            <input type="number" class="guess-input" id="guess-input" placeholder="0.000" step="0.001" min="0">
+            <button class="btn btn-primary" onclick="submitGuess(event)" style="padding:12px;font-size:0.9rem;">Confirm</button>
+        </div>
+
+        <div class="arena hidden" id="arena"></div>
+
+        <div id="main-action" style="margin-top: 14px;">
+            <button class="btn btn-primary" onclick="handleMainAction(event)" id="main-btn">▶ START</button>
+        </div>
+
+        <div class="result-panel" id="result-panel"></div>
+        <div class="kb-hint" id="kb-hint"></div>
+    </div>
+
+    <div class="modal-backdrop" id="settings-modal" onclick="bgClick(event)">
+        <div class="modal-sheet">
+            <div class="modal-handle"></div>
+            <div style="font-size:1.2rem;font-weight:900;margin-bottom:10px;">SETTINGS</div>
+            
+            <div class="settings-group">
+                <div class="settings-title">Match Settings</div>
+                <div class="toggle-row">
+                    <label>Total Rounds</label>
+                    <select id="s-rounds" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:4px;font-family:'Orbitron'" onchange="resetMatch()">
+                        <option value="1">1</option><option value="3" selected>3</option><option value="5">5</option><option value="10">10</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <div class="settings-title">Players (1-5)</div>
+                <div class="toggle-row" style="margin-bottom:12px;">
+                    <label>Active Players</label>
+                    <select id="s-pcount" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:4px;" onchange="updatePlayerCount()">
+                        <option value="1">1 Player</option>
+                        <option value="2" selected>2 Players</option>
+                        <option value="3">3 Players</option>
+                        <option value="4">4 Players</option>
+                        <option value="5">5 Players</option>
+                    </select>
+                </div>
+                <div id="player-inputs"></div>
+            </div>
+
+            <div class="settings-group">
+                <div class="settings-title">Preferences</div>
+                <div class="toggle-row">
+                    <label>🔊 Sound Effects</label>
+                    <label class="toggle"><input type="checkbox" id="s-sound" checked><span class="toggle-track"></span></label>
+                </div>
+                <div class="toggle-row">
+                    <label>📳 Haptic Feedback</label>
+                    <label class="toggle"><input type="checkbox" id="s-haptic" checked><span class="toggle-track"></span></label>
+                </div>
+            </div>
+
+            <button class="btn btn-outline" onclick="closeSettings()" style="margin-top:10px;">Done</button>
+        </div>
+    </div>
+    
+    <div class="particles" id="particles"></div>
+
+<script>
+// ==========================================
+// GLOBALS & STATE
+// ==========================================
+const COLORS = ['--p1', '--p2', '--p3', '--p4', '--p5'];
+const HEX = ['#00d4ff', '#a78bfa', '#00ff87', '#ffbe00', '#ff3366'];
+const KEYS = ['a', 's', 'd', 'f', 'g']; // Keyboard bindings
+
+let players = [
+    { id: 1, name: 'P1', color: HEX[0], var: COLORS[0], score: 0, active: true },
+    { id: 2, name: 'P2', color: HEX[1], var: COLORS[1], score: 0, active: true }
+];
+let playerCount = 2;
+let totalRounds = 3;
+let currentRound = 1;
+let currentMode = 1;
+
+const STATE = { MENU: 0, CD: 1, RUNNING: 2, GUESSING: 3, RESULT: 4 };
+let gs = STATE.MENU;
+
+let startTime = 0;
+let timerItv = null;
+let modeData = {}; // Stores temp mode logic variables
+
+// DOM
+const el = id => document.getElementById(id);
+const display = el('display');
+const statusText = el('status-text');
+const arena = el('arena');
+const resultPanel = el('result-panel');
+const mainBtn = el('main-btn');
+
+// ==========================================
+// AUDIO & HAPTICS
+// ==========================================
+function snd(type) {
+    if (!el('s-sound').checked) return;
+    try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const t = ac.currentTime;
+        const play = (f, d, w='sine', v=0.2, dt=0) => {
+            const o = ac.createOscillator(), g = ac.createGain();
+            o.connect(g); g.connect(ac.destination); o.type = w; o.frequency.value = f;
+            g.gain.setValueAtTime(v, t+dt); g.gain.exponentialRampToValueAtTime(0.001, t+dt+d);
+            o.start(t+dt); o.stop(t+dt+d+0.1);
+        };
+        const map = {
+            tick: () => play(600, 0.05, 'sine', 0.1),
+            go:   () => { play(660,0.05); play(880,0.1, 'sine', 0.2, 0.1); },
+            tap:  () => play(300, 0.05, 'square', 0.1),
+            good: () => { play(660,0.1); play(880,0.2,'sine',0.2,0.1); },
+            perf: () => { play(880,0.1); play(1100,0.1,'sine',0.2,0.1); play(1320,0.3,'sine',0.2,0.2); },
+            bad:  () => { play(250,0.1,'sawtooth',0.15); play(200,0.2,'sawtooth',0.15,0.1); },
+            exp:  () => play(100,0.5,'square',0.3) // explosion
+        };
+        if(map[type]) map[type]();
+        setTimeout(() => ac.close(), 1000);
+    } catch(e){}
+}
+function hap(pat=[30]) { if(el('s-haptic').checked && navigator.vibrate) navigator.vibrate(pat); }
+function ripple(e, target) {
+    const r = document.createElement('span'); r.className = 'ripple';
+    const rect = target.getBoundingClientRect();
+    const sz = Math.max(rect.width, rect.height) * 2;
+    r.style.cssText = `width:${sz}px;height:${sz}px;left:${(e.clientX||rect.left+rect.width/2)-rect.left-sz/2}px;top:${(e.clientY||rect.top+rect.height/2)-rect.top-sz/2}px;`;
+    target.appendChild(r); setTimeout(() => r.remove(), 500);
+}
+function shakeUI() { el('game-container').classList.add('shake'); setTimeout(()=>el('game-container').classList.remove('shake'), 400); }
+function spawnConfetti() {
+    const c = el('particles');
+    for(let i=0; i<40; i++) {
+        setTimeout(()=>{
+            const p = document.createElement('div'); p.className = 'particle';
+            const s = 5+Math.random()*8;
+            p.style.cssText = `left:${Math.random()*100}vw; top:-10px; width:${s}px; height:${s}px; background:${HEX[Math.floor(Math.random()*HEX.length)]}; animation-duration:${1+Math.random()}s;`;
+            c.appendChild(p); setTimeout(()=>p.remove(), 2000);
+        }, i*20);
+    }
+}
+const fmt = ms => (ms/1000).toFixed(3);
+
+// ==========================================
+// SCORING
+// ==========================================
+function getPts(diff, thresholds) {
+    // thresholds: [perfect, great, good]
+    if(diff <= thresholds[0]) return { p: 1000, l: 'PERFECT', c: 'var(--warn)' };
+    if(diff <= thresholds[1]) return { p: 500,  l: 'GREAT', c: 'var(--success)' };
+    if(diff <= thresholds[2]) return { p: 200,  l: 'GOOD', c: 'var(--p1)' };
+    return { p: 0, l: 'MISS', c: 'var(--danger)' };
+}
+
+// ==========================================
+// INITIALIZATION & UI
+// ==========================================
+function init() {
+    buildSettings();
+    setMode(1);
+    resetMatch();
+}
+
+function updatePlayerCount() {
+    playerCount = parseInt(el('s-pcount').value);
+    players = [];
+    for(let i=0; i<playerCount; i++) {
+        players.push({ id: i+1, name: `P${i+1}`, color: HEX[i], var: COLORS[i], score: 0, active: true });
+    }
+    buildSettings();
+    resetMatch();
+}
+
+function buildSettings() {
+    const pInputs = el('player-inputs');
+    pInputs.innerHTML = '';
+    players.forEach((p, i) => {
+        pInputs.innerHTML += `
+            <div class="player-row">
+                <div class="p-color-dot" style="background:${p.color}"></div>
+                <input type="text" value="${p.name}" maxlength="8" onchange="players[${i}].name=this.value; renderScoreboard();">
+            </div>`;
+    });
+}
+
+function renderScoreboard() {
+    const sb = el('scoreboard');
+    sb.innerHTML = '';
+    if(playerCount === 1) return; // Hide scoreboard for solo
+    players.forEach(p => {
+        sb.innerHTML += `
+            <div class="score-card" style="border-bottom: 3px solid var(${p.var})">
+                <div class="score-name" style="color:var(${p.var})">${p.name}</div>
+                <div class="score-pts">${p.score}</div>
+            </div>`;
+    });
+}
+
+function resetMatch() {
+    totalRounds = parseInt(el('s-rounds').value);
+    currentRound = 1;
+    players.forEach(p => p.score = 0);
+    renderScoreboard();
+    resetUI();
+}
+
+function resetUI() {
+    gs = STATE.MENU;
+    clearInterval(timerItv);
+    display.innerText = '00.000'; display.className = 'stopwatch-display';
+    statusText.innerText = `Round ${currentRound} / ${totalRounds}`; statusText.style.color = '';
+    resultPanel.classList.remove('show'); resultPanel.innerHTML = '';
+    el('guess-stage').classList.remove('show');
+    arena.classList.add('hidden');
+    el('tabs-container').classList.remove('hidden-play');
+    el('main-action').style.display = 'block';
+    
+    // Reset player active states
+    players.forEach(p => p.active = true);
+    
+    mainBtn.innerText = '▶ START';
+    mainBtn.className = 'btn btn-primary';
+    updateKbHint();
+}
+
+function updateKbHint() {
+    if(playerCount === 1) { el('kb-hint').innerHTML = 'Tap screen or SPACE to interact'; return; }
+    if(gs === STATE.RUNNING && (currentMode === 2 || currentMode === 3 || currentMode === 5 || currentMode === 6)) {
+        let h = players.filter(p=>p.active).map((p,i) => `<span style="color:var(${p.var})">[${KEYS[p.id-1].toUpperCase()}] ${p.name}</span>`).join(' &nbsp; ');
+        el('kb-hint').innerHTML = h;
+    } else {
+        el('kb-hint').innerHTML = 'SPACE to start/confirm';
+    }
+}
+
+// ==========================================
+// MODES CONFIGURATION
+// ==========================================
+const MODES = {
+    1: { n: 'Predict', c: '<div class="config-item"><label>Min(s)</label><input type="number" id="m1-min" value="3"></div><div class="config-item"><label>Max(s)</label><input type="number" id="m1-max" value="8"></div>' },
+    2: { n: 'Precision', c: '<div class="config-item config-full"><label>Target (s)</label><input type="number" id="m2-tgt" value="5.0" step="0.5"></div>' },
+    3: { n: 'Relay', c: '<div class="config-item config-full"><label>Interval (s)</label><input type="number" id="m3-int" value="2.0" step="0.5"></div>' },
+    4: { n: 'Bomb', c: '<div class="config-item config-full" style="text-align:center;color:var(--text-dim);font-size:0.8rem">Pass the bomb! Explodes randomly between 10-25s.</div>' },
+    5: { n: 'Zenith', c: '<div class="config-item config-full"><label>Target (s)</label><input type="number" id="m5-tgt" value="10.0" step="1"></div><div style="grid-column:span 2;text-align:center;font-size:0.75rem;color:var(--danger)">Don\'t go over!</div>' },
+    6: { n: 'Echo', c: '<div class="config-item config-full" style="text-align:center;color:var(--text-dim);font-size:0.8rem">Memorize the duration, then replicate it.</div>' }
+};
+
+function setMode(m) {
+    if(gs !== STATE.MENU) return;
+    currentMode = m;
+    document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', i+1 === m));
+    el('config-area').innerHTML = MODES[m].c;
+    resetMatch(); // Changing mode resets match
+}
+
+// ==========================================
+// GAME ENGINE
+// ==========================================
+function handleMainAction(e) {
+    if(e) ripple(e, mainBtn);
+    if(gs === STATE.MENU) startCountdown();
+    else if(gs === STATE.RESULT) {
+        if(currentRound > totalRounds) resetMatch();
+        else resetUI();
+    }
+}
+
+function startCountdown() {
+    gs = STATE.CD;
+    el('tabs-container').classList.add('hidden-play');
+    el('main-action').style.display = 'none';
+    resultPanel.classList.remove('show');
+    
+    let count = 3;
+    display.className = 'stopwatch-display cd-pop'; display.innerText = `03.000`; statusText.innerText = 'Get ready...';
+    snd('tick'); hap([15]);
+
+    const tick = () => {
+        count--;
+        if(count > 0) {
+            display.className = 'stopwatch-display'; void display.offsetWidth;
+            display.className = 'stopwatch-display cd-pop'; display.innerText = `0${count}.000`;
+            snd('tick'); hap([15]);
+            setTimeout(tick, 1000);
+        } else {
+            display.className = 'stopwatch-display running';
+            snd('go'); hap([10,30,50]);
+            launchMode();
+        }
+    };
+    setTimeout(tick, 1000);
+}
+
+function renderArena(type='simultaneous') {
+    arena.innerHTML = '';
+    arena.classList.remove('hidden');
+    players.forEach(p => {
+        if(!p.active) return;
+        arena.innerHTML += `
+            <button class="player-btn" id="btn-p${p.id}" style="color:var(${p.var})" onclick="arenaTap(${p.id}, event)">
+                <span class="pb-name">${p.name}</span>
+                <span class="pb-stat" id="stat-p${p.id}">READY</span>
+                <span class="pb-sub">Tap or ${KEYS[p.id-1].toUpperCase()}</span>
+            </button>`;
+    });
+}
+
+function arenaTap(pId, e) {
+    if(gs !== STATE.RUNNING) return;
+    const btn = el(`btn-p${pId}`);
+    if(!btn || btn.disabled) return;
+    if(e) ripple(e, btn); hap([20]); snd('tap');
+    
+    if(currentMode === 2) m2Hit(pId);
+    if(currentMode === 3) m3Hit(pId);
+    if(currentMode === 4) m4Hit(pId);
+    if(currentMode === 5) m5Hit(pId);
+    if(currentMode === 6) m6Hit(pId);
+}
+
+// ==========================================
+// MODE IMPLEMENTATIONS
+// ==========================================
+
+// --- M1: PREDICT ---
+function launchMode() {
+    gs = STATE.RUNNING; startTime = performance.now();
+    
+    if(currentMode === 1) {
+        display.innerText = '??.???';
+        const min = (parseFloat(el('m1-min').value)||3)*1000;
+        const max = (parseFloat(el('m1-max').value)||8)*1000;
+        modeData.target = min + Math.random()*(max-min);
+        statusText.innerText = 'Clock is running... invisibly!';
+        setTimeout(() => { 
+            modeData.actual = performance.now() - startTime; 
+            gs = STATE.GUESSING; snd('tick');
+            modeData.pIndex = 0; modeData.guesses = {};
+            m1NextGuess();
+        }, modeData.target);
+    }
+    else if(currentMode === 2 || currentMode === 5) {
+        modeData.target = (parseFloat(el(`m${currentMode}-tgt`).value)||5)*1000;
+        display.innerText = '??.???'; display.classList.add('hidden-timer');
+        statusText.innerText = `Target: ${fmt(modeData.target)}s`;
+        modeData.hits = {}; modeData.done = 0;
+        renderArena();
+        updateKbHint();
+        // Fallback timeout to prevent infinite hangs
+        timerItv = setTimeout(() => { endRound(); }, modeData.target + 10000); 
+    }
+    else if(currentMode === 3) { // RELAY
+        modeData.interval = (parseFloat(el('m3-int').value)||2)*1000;
+        modeData.hits = {}; players.forEach(p => modeData.hits[p.id] = 0);
+        modeData.turnIndex = 0; modeData.mult = 1; modeData.roundMax = players.filter(p=>p.active).length * 2; // 2 laps
+        renderArena();
+        m3SetTurn();
+        updateKbHint();
+    }
+    else if(currentMode === 4) { // BOMB
+        if(playerCount < 2) { alert("Bomb requires 2+ players!"); resetUI(); return; }
+        modeData.fuse = 10000 + Math.random()*15000; // 10-25s
+        modeData.holderIdx = Math.floor(Math.random() * playerCount);
+        modeData.alive = players.map(p=>p.id);
+        display.classList.add('danger'); display.innerText = 'BOMB ACTIVE';
+        statusText.innerText = 'Pass it quickly!';
+        renderArena();
+        m4SetTurn();
+        
+        modeData.bombTimer = setInterval(() => {
+            const elapsed = performance.now() - startTime;
+            if(elapsed >= modeData.fuse) m4Explode();
+        }, 50);
+        updateKbHint();
+    }
+    else if(currentMode === 6) { // ECHO
+        modeData.phase = 1; // 1: Listen, 2: Replicate
+        modeData.target = 2000 + Math.random()*4000;
+        display.innerText = 'MEMORIZE';
+        statusText.innerText = 'Watch and listen...';
+        setTimeout(() => {
+            snd('bad'); hap([50,50,50]);
+            display.innerText = 'REPLICATE';
+            statusText.innerText = 'Press when time matches!';
+            modeData.phase = 2; modeData.hits = {}; modeData.done = 0;
+            startTime = performance.now(); // reset start time for phase 2
+            renderArena();
+            updateKbHint();
+        }, modeData.target);
+    }
+}
+
+// -- M1 Logic --
+function m1NextGuess() {
+    if(modeData.pIndex >= playerCount) { endRound(); return; }
+    const p = players[modeData.pIndex];
+    if(!p.active) { modeData.pIndex++; m1NextGuess(); return; }
+    
+    el('guess-stage').classList.add('show');
+    el('guess-prompt').innerText = `${p.name}, enter your guess`;
+    el('guess-prompt').style.color = `var(${p.var})`;
+    const inp = el('guess-input'); inp.value = ''; setTimeout(()=>inp.focus(),50);
+}
+function submitGuess(e) {
+    if(e) ripple(e, e.target);
+    const val = parseFloat(el('guess-input').value);
+    if(isNaN(val) || val <= 0) return;
+    hap([20]); snd('tap');
+    const p = players[modeData.pIndex];
+    modeData.guesses[p.id] = val * 1000;
+    modeData.pIndex++;
+    el('guess-stage').classList.remove('show');
+    setTimeout(m1NextGuess, 200);
+}
+
+// -- M2 / M5 Logic --
+function m2Hit(pId) {
+    const elapsed = performance.now() - startTime;
+    modeData.hits[pId] = elapsed;
+    const btn = el(`btn-p${pId}`);
+    btn.disabled = true; btn.classList.add('done');
+    el(`stat-p${pId}`).innerText = fmt(elapsed);
+    modeData.done++;
+    const activeCount = players.filter(p=>p.active).length;
+    if(modeData.done >= activeCount) { clearTimeout(timerItv); setTimeout(endRound, 500); }
+}
+function m5Hit(pId) { m2Hit(pId); } // Same mechanics, different scoring
+
+// -- M3 Logic (Relay) --
+function m3SetTurn() {
+    const active = players.filter(p=>p.active);
+    const curr = active[modeData.turnIndex % active.length];
+    modeData.currId = curr.id;
+    
+    const targetTime = modeData.interval * modeData.mult;
+    statusText.innerText = `Target: ${fmt(targetTime)}s | ${curr.name}'s Turn`;
+    statusText.style.color = `var(${curr.var})`;
+    display.innerText = '??.???';
+    
+    active.forEach(p => {
+        const btn = el(`btn-p${p.id}`);
+        if(p.id === curr.id) { btn.disabled = false; btn.classList.add('active'); }
+        else { btn.disabled = true; btn.classList.remove('active'); }
+    });
+}
+function m3Hit(pId) {
+    if(pId !== modeData.currId) return;
+    const elapsed = performance.now() - startTime;
+    const target = modeData.interval * modeData.mult;
+    const diff = Math.abs(target - elapsed);
+    
+    const pts = getPts(diff, [150, 400, 800]); // Tighter thresholds for relay
+    modeData.hits[pId] += pts.p;
+    
+    el(`stat-p${pId}`).innerText = modeData.hits[pId] + ' pts';
+    el(`btn-p${pId}`).classList.remove('active');
+    
+    if(pts.p === 1000) snd('perf'); else if(pts.p > 0) snd('good'); else { snd('bad'); shakeUI(); }
+    
+    modeData.mult++;
+    modeData.turnIndex++;
+    if(modeData.mult > modeData.roundMax) setTimeout(endRound, 500);
+    else m3SetTurn();
+}
+
+// -- M4 Logic (Bomb) --
+function m4SetTurn() {
+    const hId = modeData.alive[modeData.holderIdx];
+    modeData.alive.forEach(id => {
+        const btn = el(`btn-p${id}`);
+        if(id === hId) { btn.disabled = false; btn.classList.add('active'); btn.style.borderColor = 'var(--danger)'; }
+        else { btn.disabled = true; btn.classList.remove('active'); btn.style.borderColor = ''; }
+    });
+}
+function m4Hit(pId) {
+    if(pId !== modeData.alive[modeData.holderIdx]) return;
+    modeData.holderIdx = (modeData.holderIdx + 1) % modeData.alive.length;
+    m4SetTurn();
+}
+function m4Explode() {
+    clearInterval(modeData.bombTimer);
+    gs = STATE.RESULT;
+    snd('exp'); shakeUI(); hap([100,50,100,50,200]);
+    display.classList.remove('danger'); display.innerText = 'BOOM'; display.style.color = 'var(--danger)';
+    
+    const loserId = modeData.alive[modeData.holderIdx];
+    el(`btn-p${loserId}`).classList.add('eliminated');
+    
+    // Scoring: Survivors get points, loser gets 0
+    let html = `<div style="color:var(--danger);font-size:1.2rem;font-weight:900;margin-bottom:10px;">${players.find(p=>p.id===loserId).name} EXPLODED!</div><div class="result-grid">`;
+    players.forEach(p => {
+        if(!p.active) return;
+        let pts = (p.id === loserId) ? 0 : 500;
+        p.score += pts;
+        html += `<div class="res-card"><div class="res-name" style="color:var(${p.var})">${p.name}</div><div class="res-pts ${pts===0?'zero':''}">${pts>0?'+':''}${pts}</div></div>`;
+    });
+    html += `</div>`;
+    
+    showEndScreen(html);
+}
+
+// -- M6 Logic (Echo) --
+function m6Hit(pId) {
+    if(modeData.phase !== 2) return;
+    m2Hit(pId);
+}
+
+// ==========================================
+// ROUND END & SCORING
+// ==========================================
+function endRound() {
+    gs = STATE.RESULT;
+    display.classList.remove('hidden-timer');
+    arena.classList.add('hidden');
+    let html = '';
+
+    if(currentMode === 1) {
+        display.innerText = fmt(modeData.actual);
+        html = `<div style="margin-bottom:10px;color:var(--text-dim)">Actual: <strong>${fmt(modeData.actual)}s</strong></div><div class="result-grid">`;
+        players.forEach(p => {
+            if(!p.active) return;
+            const guess = modeData.guesses[p.id];
+            const diff = Math.abs(modeData.actual - guess);
+            const res = getPts(diff, [200, 500, 1500]);
+            p.score += res.p;
+            html += `<div class="res-card"><div class="res-name" style="color:var(${p.var})">${p.name}</div><div class="res-val">${fmt(guess)}s</div><div style="font-size:0.7rem;opacity:0.7">Off by ${fmt(diff)}</div><div class="res-pts" style="color:${res.c}">${res.l} (+${res.p})</div></div>`;
+        });
+        html += `</div>`;
+    }
+    else if(currentMode === 2 || currentMode === 5 || currentMode === 6) {
+        let tgt = modeData.target;
+        display.innerText = currentMode===6 ? fmt(tgt) : fmt(tgt);
+        html = `<div style="margin-bottom:10px;color:var(--text-dim)">Target: <strong>${fmt(tgt)}s</strong></div><div class="result-grid">`;
+        
+        players.forEach(p => {
+            if(!p.active) return;
+            const hit = modeData.hits[p.id] || 0;
+            const diff = Math.abs(tgt - hit);
+            let res;
+            if(currentMode === 5 && hit > tgt) {
+                res = { p: 0, l: 'BUST', c: 'var(--danger)' };
+            } else {
+                res = getPts(diff, [150, 400, 1000]);
+            }
+            p.score += res.p;
+            html += `<div class="res-card"><div class="res-name" style="color:var(${p.var})">${p.name}</div><div class="res-val">${hit?fmt(hit):'--'}s</div><div style="font-size:0.7rem;opacity:0.7">Off by ${fmt(diff)}</div><div class="res-pts" style="color:${res.c}">${res.l} (+${res.p})</div></div>`;
+        });
+        html += `</div>`;
+    }
+    else if(currentMode === 3) {
+        display.innerText = 'DONE';
+        html = `<div class="result-grid">`;
+        players.forEach(p => {
+            if(!p.active) return;
+            const pts = modeData.hits[p.id];
+            p.score += pts;
+            html += `<div class="res-card"><div class="res-name" style="color:var(${p.var})">${p.name}</div><div class="res-val">${pts}</div><div class="res-pts">+${pts}</div></div>`;
+        });
+        html += `</div>`;
+    }
+
+    if(currentMode !== 4) showEndScreen(html); // M4 handles its own
+}
+
+function showEndScreen(html) {
+    snd('good');
+    renderScoreboard();
+    
+    currentRound++;
+    if(currentRound > totalRounds) {
+        // MATCH OVER
+        const maxScore = Math.max(...players.map(p=>p.score));
+        const winners = players.filter(p=>p.score === maxScore);
+        const winName = winners.map(w=>w.name).join(' & ');
+        statusText.innerText = 'MATCH OVER!';
+        statusText.style.color = 'var(--warn)';
+        
+        html = `<div style="font-size:1.4rem;font-weight:900;color:var(--warn);margin-bottom:15px;text-transform:uppercase;">🏆 ${winName} WINS!</div>` + html;
+        
+        mainBtn.innerText = '↺ NEW MATCH';
+        spawnConfetti(); hap([50,50,50,100,200]); snd('perf');
+    } else {
+        statusText.innerText = 'Round Complete!';
+        mainBtn.innerText = '▶ NEXT ROUND';
+    }
+    
+    resultPanel.innerHTML = html;
+    resultPanel.classList.add('show');
+    el('main-action').style.display = 'block';
+}
+
+// ==========================================
+// INPUT HANDLING
+// ==========================================
+document.addEventListener('keydown', e => {
+    if(e.repeat) return;
+    const k = e.key.toLowerCase();
+    
+    // Main action (Space)
+    if(k === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        if(gs === STATE.MENU || gs === STATE.RESULT) handleMainAction();
+        else if(gs === STATE.GUESSING && currentMode === 1) submitGuess();
+        return;
+    }
+    
+    // Player bindings
+    if(gs === STATE.RUNNING) {
+        const pIdx = KEYS.indexOf(k);
+        if(pIdx !== -1 && pIdx < playerCount) {
+            arenaTap(players[pIdx].id);
+        }
+    }
+});
+
+// Settings Modal logic
+function openSettings() { el('settings-modal').classList.add('open'); }
+function closeSettings() { el('settings-modal').classList.remove('open'); }
+function bgClick(e) { if(e.target === el('settings-modal')) closeSettings(); }
+
+// Boot
+init();
+
+</script>
+</body>
+</html>
