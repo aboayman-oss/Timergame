@@ -69,23 +69,34 @@
             vertical-align: middle; margin-right: 6px; color: inherit;
         }
 
-        .tabs-container {
-            width: 100%; max-width: 500px; overflow-x: auto; overflow-y: visible;
-            margin-bottom: 12px; padding: 4px 0 8px; scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
+        .mode-btn {
+            background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim);
+            height: 42px; padding: 0 14px; border-radius: 10px; cursor: pointer;
+            display: flex; align-items: center; gap: 6px; font-family: 'Exo 2', sans-serif;
+            font-weight: 700; font-size: 0.82rem; transition: all 0.2s; touch-action: manipulation;
+            white-space: nowrap;
         }
-        .tabs-container::-webkit-scrollbar { display: none; }
-        .tabs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; transition: opacity 0.3s; }
-        .tabs.hidden-play { opacity: 0; pointer-events: none; height: 0; overflow: hidden; margin: 0; }
-        .tab-btn {
-            background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border);
-            padding: 10px 14px; border-radius: 10px; cursor: pointer;
-            font-family: 'Exo 2', sans-serif; font-weight: 700; font-size: 0.85rem;
-            transition: all 0.2s; touch-action: manipulation; display: flex; flex-direction: column; align-items: center;
-            min-width: 74px;
+        .mode-btn:hover, .mode-btn:active { background: var(--p1-dim); color: var(--p1); border-color: var(--p1); }
+        .mode-btn-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+
+        .mode-list { display: grid; gap: 8px; }
+        .mode-card {
+            background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+            padding: 12px 14px; cursor: pointer; transition: all 0.2s; touch-action: manipulation;
+            display: flex; align-items: flex-start; gap: 12px;
         }
-        .tab-btn.active { background: var(--p1-dim); color: var(--p1); border-color: var(--p1); }
-        .tab-btn small { opacity: 0.65; font-weight: 400; font-size: 0.75rem; margin-top: 2px; }
+        .mode-card:hover, .mode-card:active { border-color: var(--p1); background: var(--p1-dim); }
+        .mode-card.active { border-color: var(--p1); background: var(--p1-dim); }
+        .mode-card-id {
+            font-family: 'Orbitron', sans-serif; font-size: 0.7rem; font-weight: 900;
+            color: var(--p1); background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.2);
+            border-radius: 6px; padding: 4px 7px; flex-shrink: 0; margin-top: 1px;
+        }
+        .mode-card.active .mode-card-id { background: rgba(0,212,255,0.2); }
+        .mode-card-body { flex: 1; min-width: 0; }
+        .mode-card-name { font-weight: 700; font-size: 0.9rem; color: var(--text); margin-bottom: 3px; }
+        .mode-card.active .mode-card-name { color: var(--p1); }
+        .mode-card-desc { font-size: 0.78rem; color: var(--text-dim); line-height: 1.4; }
 
         .scoreboard {
             width: 100%; max-width: 500px;
@@ -304,7 +315,7 @@
         @media (max-width: 400px) {
             .game-container { padding: 14px; }
             .stopwatch-display { font-size: 2.5rem; }
-            .tab-btn { min-width: 68px; padding-inline: 10px; }
+            .mode-btn-label { max-width: 90px; }
         }
     </style>
 </head>
@@ -312,13 +323,13 @@
     <div class="header">
         <div class="game-title" id="game-title"></div>
         <div class="header-actions">
+            <button class="mode-btn" onclick="openModes()" aria-label="Select game mode" id="mode-btn">
+                <span id="mode-btn-label" class="mode-btn-label"></span>
+                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </button>
             <button class="icon-btn" onclick="openHelp()" aria-label="How to play">?</button>
             <button class="icon-btn" onclick="openSettings()" aria-label="Settings" id="settings-btn"></button>
         </div>
-    </div>
-
-    <div class="tabs-container" id="tabs-container">
-        <div class="tabs" id="mode-tabs"></div>
     </div>
 
     <div class="scoreboard" id="scoreboard"></div>
@@ -403,6 +414,15 @@
             <div style="font-size:0.85rem;color:var(--text-dim);line-height:1.45;">Controls: tap player tiles, or use <strong>A / S / D / F / G</strong>. Press <strong>SPACE</strong> to start, confirm, or advance.</div>
             <div class="help-list" id="help-list"></div>
             <button class="btn btn-outline" onclick="closeHelp()" style="margin-top:6px;">Close</button>
+        </div>
+    </div>
+
+    <div class="modal-backdrop" id="modes-modal" aria-hidden="true" onclick="bgClick(event, 'modes-modal')">
+        <div class="modal-sheet">
+            <div class="modal-handle"></div>
+            <div style="font-size:1.2rem;font-weight:900;margin-bottom:10px;">SELECT MODE</div>
+            <div class="mode-list" id="mode-list"></div>
+            <button class="btn btn-outline" onclick="closeModes()" style="margin-top:6px;">Close</button>
         </div>
     </div>
 
@@ -645,10 +665,18 @@
         el('haptic-label').innerHTML = `${ICONS.haptic}<span>Haptic Feedback</span>`;
         mainBtn.innerHTML = `${ICONS.play} START`;
 
-        const tabs = el('mode-tabs');
-        tabs.innerHTML = Object.entries(MODES).map(([id, mode]) => (
-            `<button class="tab-btn${Number(id) === currentMode ? ' active' : ''}" onclick="setMode(${id})">M${id}<small>${safe(mode.short)}</small></button>`
+        const modeList = el('mode-list');
+        modeList.innerHTML = Object.entries(MODES).map(([id, mode]) => (
+            `<div class="mode-card${Number(id) === currentMode ? ' active' : ''}" role="button" tabindex="0" data-mode-id="${id}" onclick="selectModeFromModal(${id})" onkeydown="if(event.key==='Enter'||event.key===' '){selectModeFromModal(${id})}">
+                <div class="mode-card-id">M${id}</div>
+                <div class="mode-card-body">
+                    <div class="mode-card-name">${safe(mode.n)}</div>
+                    <div class="mode-card-desc">${safe(mode.desc)}</div>
+                </div>
+            </div>`
         )).join('');
+
+        updateModeBtnLabel();
 
         const helpList = el('help-list');
         helpList.innerHTML = Object.entries(MODES).map(([id, mode]) => `
@@ -720,10 +748,23 @@
         resetMatch();
     }
 
+    function updateModeBtnLabel() {
+        const mode = MODES[currentMode];
+        el('mode-btn-label').textContent = `M${currentMode} ${mode.short}`;
+    }
+
+    function selectModeFromModal(m) {
+        setMode(m);
+        closeModes();
+    }
+
     function setMode(m) {
         if (gs !== STATE.MENU) return;
         currentMode = Number(m);
-        document.querySelectorAll('.tab-btn').forEach((btn, i) => btn.classList.toggle('active', i + 1 === currentMode));
+        document.querySelectorAll('.mode-card').forEach(card => {
+            card.classList.toggle('active', Number(card.dataset.modeId) === currentMode);
+        });
+        updateModeBtnLabel();
         renderModeConfig();
         savePrefs();
         resetMatch();
@@ -749,7 +790,8 @@
         arena.classList.add('hidden');
         arena.innerHTML = '';
         el('guess-stage').classList.remove('show');
-        el('tabs-container').classList.remove('hidden-play');
+        el('mode-btn').disabled = false;
+        el('mode-btn').style.opacity = '';
         el('main-action').style.display = 'block';
         resultPanel.classList.remove('show');
         resultPanel.innerHTML = '';
@@ -814,7 +856,8 @@
 
     function startNumericCountdown(onComplete) {
         gs = STATE.CD;
-        el('tabs-container').classList.add('hidden-play');
+        el('mode-btn').disabled = true;
+        el('mode-btn').style.opacity = '0.4';
         el('main-action').style.display = 'none';
         resultPanel.classList.remove('show');
         arena.classList.add('hidden');
@@ -1298,6 +1341,8 @@
     function closeSettings() { setModalState('settings-modal', false); savePrefs(); }
     function openHelp() { setModalState('help-modal', true); }
     function closeHelp() { setModalState('help-modal', false); }
+    function openModes() { setModalState('modes-modal', true); }
+    function closeModes() { setModalState('modes-modal', false); }
     function bgClick(event, id) { if (event.target === el(id)) setModalState(id, false); }
 
     function showEndScreen(html) {
