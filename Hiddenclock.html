@@ -186,6 +186,7 @@
             padding: 10px 14px; flex-shrink: 0;
             /* Reserve space below the fixed HUD scoreboard in portrait mode */
             padding-top: calc(env(safe-area-inset-top, 4px) + 48px);
+            overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: 100vh; max-height: 100dvh;
         }
         .arena-players-zone {
             flex: 1; display: grid; gap: 6px; padding: 6px;
@@ -408,7 +409,31 @@
             width: 100%; max-width: 200px; background: var(--bg); border: 1px solid var(--border);
             color: var(--text); padding: 14px; border-radius: 8px; font-family: 'Orbitron', sans-serif;
             font-size: 1.3rem; text-align: center; margin: 10px auto; display: block;
+            caret-color: var(--p1);
         }
+        .guess-input.numpad-active { border-color: var(--p1); box-shadow: 0 0 8px var(--p1-dim); }
+
+        /* ===== CUSTOM IN-GAME NUMPAD ===== */
+        .game-numpad {
+            display: none; width: 100%; max-width: 320px; margin: 10px auto 0;
+            background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 10px; user-select: none; -webkit-user-select: none;
+        }
+        .game-numpad.show { display: block; }
+        .numpad-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+        }
+        .numpad-btn {
+            background: var(--bg); border: 1px solid var(--border); color: var(--text);
+            font-family: 'Orbitron', sans-serif; font-size: 1.3rem; font-weight: 700;
+            padding: 14px 0; border-radius: 10px; cursor: pointer;
+            touch-action: manipulation; transition: all 0.1s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .numpad-btn:active { background: var(--p1-dim); border-color: var(--p1); transform: scale(0.95); }
+        .numpad-btn.numpad-wide { grid-column: span 2; }
+        .numpad-btn.numpad-del { background: var(--surface); color: var(--danger); font-size: 1rem; }
+        .numpad-btn.numpad-del:active { background: rgba(255,51,102,0.15); }
 
         .btn {
             background: var(--text); color: var(--bg); border: none; padding: 16px;
@@ -456,6 +481,7 @@
             margin-top: 14px; padding: 16px; background: var(--surface2);
             border: 1px solid var(--border); border-radius: var(--radius);
             font-size: 0.9rem; text-align: center; display: none;
+            max-height: 50vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
         }
         .result-panel.show { display: block; animation: cdPop 0.4s; }
         .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
@@ -571,8 +597,25 @@
             <div class="guess-stage" id="guess-stage">
                 <h3 id="guess-prompt" style="color:var(--text-dim);font-size:0.8rem;text-transform:uppercase;margin-bottom:8px;">Guess</h3>
                 <div id="guess-inputs-all"></div>
-                <input type="number" class="guess-input" id="guess-input" placeholder="0.000" step="0.001" min="0" style="display:none;">
+                <input type="text" class="guess-input" id="guess-input" placeholder="0.000" style="display:none;" readonly inputmode="none">
                 <button class="btn btn-primary" onclick="submitGuess(event)" style="padding:12px;font-size:0.9rem;" id="guess-confirm-btn">Confirm</button>
+            </div>
+            <!-- Custom In-Game Number Pad -->
+            <div class="game-numpad" id="game-numpad">
+                <div class="numpad-grid">
+                    <button class="numpad-btn" data-key="1">1</button>
+                    <button class="numpad-btn" data-key="2">2</button>
+                    <button class="numpad-btn" data-key="3">3</button>
+                    <button class="numpad-btn" data-key="4">4</button>
+                    <button class="numpad-btn" data-key="5">5</button>
+                    <button class="numpad-btn" data-key="6">6</button>
+                    <button class="numpad-btn" data-key="7">7</button>
+                    <button class="numpad-btn" data-key="8">8</button>
+                    <button class="numpad-btn" data-key="9">9</button>
+                    <button class="numpad-btn" data-key=".">.</button>
+                    <button class="numpad-btn" data-key="0">0</button>
+                    <button class="numpad-btn numpad-del" data-key="del">⌫</button>
+                </div>
             </div>
             <div id="main-action">
                 <button class="btn btn-primary" onclick="handleMainAction(event)" id="main-btn"></button>
@@ -925,6 +968,49 @@
     const resultPanel = el('result-panel');
     const mainBtn = el('main-btn');
     const guessInput = el('guess-input');
+    const gameNumpad = el('game-numpad');
+
+    /* ===== CUSTOM NUMPAD LOGIC ===== */
+    let numpadTarget = null; // the input element the numpad is currently targeting
+
+    function numpadShow(inputEl) {
+        numpadTarget = inputEl;
+        if (inputEl) inputEl.classList.add('numpad-active');
+        gameNumpad.classList.add('show');
+    }
+    function numpadHide() {
+        if (numpadTarget) numpadTarget.classList.remove('numpad-active');
+        numpadTarget = null;
+        gameNumpad.classList.remove('show');
+    }
+    function numpadPress(key) {
+        if (!numpadTarget) return;
+        let val = numpadTarget.value || '';
+        if (key === 'del') {
+            val = val.slice(0, -1);
+        } else if (key === '.') {
+            if (val.includes('.')) return; // only one decimal
+            if (val === '') val = '0.';
+            else val += '.';
+        } else {
+            // Limit length to prevent absurd entries
+            if (val.replace('.', '').length >= 6) return;
+            val += key;
+        }
+        numpadTarget.value = val;
+        // Trigger input event so any listeners fire
+        numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    gameNumpad.addEventListener('pointerdown', function(e) {
+        const btn = e.target.closest('.numpad-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const key = btn.dataset.key;
+        numpadPress(key);
+        hap([8]);
+    });
 
     const activePlayers = () => players.slice(0, playerCount).map(p => ({ ...p, active: true }));
     const realActivePlayers = () => players.slice(0, playerCount);
@@ -1377,6 +1463,7 @@
         el('guess-inputs-all').innerHTML = '';
         el('guess-input').style.display = 'none';
         el('guess-confirm-btn').style.display = '';
+        numpadHide();
         el('mode-btn').disabled = false;
         el('mode-btn').style.opacity = '';
         el('main-action').style.display = 'block';
@@ -1593,14 +1680,18 @@
                         card.innerHTML = `
                             <div class="zone-name" style="color:var(${p.var})">${safe(p.name)}</div>
                             <div class="manual-guess-container" id="guess-container-p${p.id}" style="display:flex;align-items:center;gap:8px;justify-content:center;margin:8px 0;">
-                                <input type="number" id="guess-input-p${p.id}" placeholder="seconds" step="0.001" min="0" max="999"
-                                    style="width:100px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Orbitron',sans-serif;font-size:0.9rem;text-align:center;">
+                                <input type="text" id="guess-input-p${p.id}" placeholder="seconds" readonly inputmode="none"
+                                    style="width:100px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:'Orbitron',sans-serif;font-size:0.9rem;text-align:center;"
+                                    onfocus="numpadShow(this)">
                                 <button class="btn btn-outline" id="guess-lock-p${p.id}" onclick="lockManualGuess(${p.id})"
                                     style="padding:8px 14px;font-size:0.8rem;font-weight:700;">LOCK</button>
                             </div>
                             <div class="zone-stat" id="stat-p${p.id}" style="font-size:0.8rem;color:var(--text-dim)">Enter your guess</div>`;
                         arena.appendChild(card);
                     });
+                    // Show numpad targeting the first player's input
+                    const firstP = realActivePlayers()[0];
+                    if (firstP) numpadShow(el(`guess-input-p${firstP.id}`));
                     updateKbHint();
                     return false;
                 }
@@ -1942,10 +2033,13 @@
         container.innerHTML = actives.map(p => `
             <div style="margin:8px 0;display:flex;align-items:center;gap:8px;" id="guess-row-${p.id}">
                 <span style="color:var(${p.var});font-weight:700;font-size:0.8rem;min-width:50px;">${safe(p.name)}</span>
-                <input type="number" class="guess-input" id="guess-p${p.id}" placeholder="0.000" step="0.001" min="0" style="flex:1;display:inline-block;margin:0;">
+                <input type="text" class="guess-input" id="guess-p${p.id}" placeholder="0.000" readonly inputmode="none" style="flex:1;display:inline-block;margin:0;" onfocus="numpadShow(this)">
                 <button class="btn btn-primary" onclick="lockGuess(${p.id}, event)" style="padding:8px 14px;font-size:0.75rem;" id="lock-p${p.id}">Lock</button>
             </div>`).join('');
         el('guess-confirm-btn').style.display = 'none';
+        // Auto-focus the first input and show numpad
+        const firstInput = el(`guess-p${actives[0].id}`);
+        if (firstInput) numpadShow(firstInput);
         showToast('Timer stopped! Lock in guesses — no peeking!');
     }
 
@@ -1953,23 +2047,30 @@
         if (gs !== STATE.GUESSING) return;
         const input = el(`guess-p${pId}`);
         const val = parseFloat(input.value);
-        if (Number.isNaN(val) || val <= 0) { input.focus(); return; }
+        if (Number.isNaN(val) || val <= 0) { numpadShow(input); return; }
         modeData.guesses[pId] = val * 1000;
         modeData.lockedCount += 1;
         input.disabled = true;
-        input.type = 'password';
+        input.value = '••••';
         const lockBtn = el(`lock-p${pId}`);
         lockBtn.disabled = true;
         lockBtn.textContent = '✓';
         hap([20]); snd('tap');
         if (modeData.lockedCount >= realActivePlayers().length) {
+            numpadHide();
             addTimeout(endRound, 300);
+        } else {
+            // Move numpad focus to next unlocked input
+            const actives = realActivePlayers();
+            const nextP = actives.find(p => !modeData.guesses[p.id]);
+            if (nextP) numpadShow(el(`guess-p${nextP.id}`));
+            else numpadHide();
         }
     }
 
     function guessNext() {
         const actives = realActivePlayers();
-        if (modeData.pIndex >= actives.length) { endRound(); return; }
+        if (modeData.pIndex >= actives.length) { numpadHide(); endRound(); return; }
         const p = actives[modeData.pIndex];
         el('guess-stage').classList.add('show');
         el('guess-prompt').textContent = `${p.name}, enter your guess`;
@@ -1978,7 +2079,7 @@
         el('guess-inputs-all').innerHTML = '';
         el('guess-confirm-btn').style.display = '';
         guessInput.value = '';
-        addTimeout(() => guessInput.focus(), 50);
+        numpadShow(guessInput);
         showToast(`Actual timer complete. ${p.name} is guessing.`);
     }
 
@@ -1992,6 +2093,7 @@
         hap([20]); snd('tap');
         modeData.pIndex += 1;
         el('guess-stage').classList.remove('show');
+        numpadHide();
         addTimeout(guessNext, 180);
     }
 
@@ -2051,19 +2153,27 @@
         const val = parseFloat(input.value);
         if (Number.isNaN(val) || val < 0) {
             showToast('Enter a valid number!', 'var(--danger)');
+            numpadShow(input);
             return;
         }
         modeData.guesses[pId] = val * 1000; // convert seconds to ms
         modeData.lockedCount += 1;
-        // Hide the value (password-like masking)
-        input.type = 'password';
+        // Hide the value (masking)
+        input.value = '••••';
         input.disabled = true;
         const lockBtn = el(`guess-lock-p${pId}`);
         if (lockBtn) { lockBtn.disabled = true; lockBtn.textContent = '🔒'; }
         el(`stat-p${pId}`).textContent = 'LOCKED';
         snd('tap'); hap([20]);
         if (modeData.lockedCount >= realActivePlayers().length) {
+            numpadHide();
             addTimeout(endRound, 400);
+        } else {
+            // Move numpad focus to next unlocked input
+            const actives = realActivePlayers();
+            const nextP = actives.find(p => !modeData.guesses[p.id]);
+            if (nextP) numpadShow(el(`guess-input-p${nextP.id}`));
+            else numpadHide();
         }
     }
     function blindHit(pId) { precisionHit(pId); }
@@ -2401,6 +2511,7 @@
 
     function endRound() {
         clearTimers();
+        numpadHide();
         gs = STATE.RESULT;
         arena.classList.add('hidden');
         let html = '';
