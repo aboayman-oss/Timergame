@@ -184,6 +184,8 @@
         .arena-timer-zone {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             padding: 10px 14px; flex-shrink: 0;
+            /* Reserve space below the fixed HUD scoreboard in portrait mode */
+            padding-top: calc(env(safe-area-inset-top, 4px) + 48px);
         }
         .arena-players-zone {
             flex: 1; display: grid; gap: 6px; padding: 6px;
@@ -208,11 +210,15 @@
                 z-index: 60; padding: 20px; pointer-events: none;
                 background: radial-gradient(ellipse, var(--bg) 60%, transparent 100%);
                 border-radius: 50%; width: 280px; height: 200px;
+                /* Reset portrait top-padding in landscape */
+                padding-top: 20px;
             }
             .arena-timer-zone * { pointer-events: auto; }
             .arena-players-zone {
                 position: absolute; inset: 0;
                 padding: 12px;
+                /* Increase gap to reserve center space for the timer bubble */
+                gap: 220px 300px;
             }
             .arena-players-zone.players-2 {
                 grid-template-columns: 1fr 1fr; grid-template-rows: 1fr;
