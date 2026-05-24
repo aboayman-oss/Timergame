@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
     <title>Hidden Clock — Master Edition</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;600;700&display=swap');
@@ -47,6 +47,34 @@
         /* ===== STATE-BASED LAYOUT ===== */
         body.state-arena { padding: 0; overflow: hidden; }
         body.state-transition { overflow: hidden; }
+
+        /* Safe-area text insets for player buttons at screen edges */
+        body.state-arena .arena-players-zone .player-btn {
+            padding-left: max(8px, env(safe-area-inset-left, 0px));
+            padding-right: max(8px, env(safe-area-inset-right, 0px));
+        }
+        /* Top-row buttons get top safe area inset */
+        body.state-arena .arena-players-zone.players-1 .player-btn:first-child,
+        body.state-arena .arena-players-zone.players-2 .player-btn:first-child,
+        body.state-arena .arena-players-zone.players-3 .player-btn:first-child,
+        body.state-arena .arena-players-zone.players-4 .player-btn:nth-child(1),
+        body.state-arena .arena-players-zone.players-4 .player-btn:nth-child(2),
+        body.state-arena .arena-players-zone.players-5 .player-btn:nth-child(1),
+        body.state-arena .arena-players-zone.players-5 .player-btn:nth-child(2) {
+            padding-top: max(16px, env(safe-area-inset-top, 0px));
+        }
+        /* Bottom-row buttons get bottom safe area inset */
+        body.state-arena .arena-players-zone.players-1 .player-btn:last-child,
+        body.state-arena .arena-players-zone.players-2 .player-btn:last-child,
+        body.state-arena .arena-players-zone.players-3 .player-btn:nth-child(2),
+        body.state-arena .arena-players-zone.players-3 .player-btn:nth-child(3),
+        body.state-arena .arena-players-zone.players-4 .player-btn:nth-child(3),
+        body.state-arena .arena-players-zone.players-4 .player-btn:nth-child(4),
+        body.state-arena .arena-players-zone.players-5 .player-btn:nth-child(3),
+        body.state-arena .arena-players-zone.players-5 .player-btn:nth-child(4),
+        body.state-arena .arena-players-zone.players-5 .player-btn:nth-child(5) {
+            padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+        }
 
         /* ===== HEADER ===== */
         .header {
@@ -242,7 +270,11 @@
             /* Radial text rotation for tablet */
             .arena-players-zone.players-4 .player-btn:nth-child(1),
             .arena-players-zone.players-4 .player-btn:nth-child(2),
-            .arena-players-zone.players-3 .player-btn:first-child { transform: rotate(180deg); }
+            .arena-players-zone.players-3 .player-btn:first-child,
+            .arena-players-zone.players-2 .player-btn:first-child,
+            .arena-players-zone.players-5 .player-btn:nth-child(1),
+            .arena-players-zone.players-5 .player-btn:nth-child(2),
+            .arena-players-zone.players-5 .player-btn:nth-child(3) { transform: rotate(180deg); }
             .arena-players-zone.players-4 .player-btn:nth-child(1) .pb-name,
             .arena-players-zone.players-4 .player-btn:nth-child(1) .pb-stat,
             .arena-players-zone.players-4 .player-btn:nth-child(1) .pb-sub,
@@ -251,7 +283,19 @@
             .arena-players-zone.players-4 .player-btn:nth-child(2) .pb-sub,
             .arena-players-zone.players-3 .player-btn:first-child .pb-name,
             .arena-players-zone.players-3 .player-btn:first-child .pb-stat,
-            .arena-players-zone.players-3 .player-btn:first-child .pb-sub { transform: rotate(180deg); }
+            .arena-players-zone.players-3 .player-btn:first-child .pb-sub,
+            .arena-players-zone.players-2 .player-btn:first-child .pb-name,
+            .arena-players-zone.players-2 .player-btn:first-child .pb-stat,
+            .arena-players-zone.players-2 .player-btn:first-child .pb-sub,
+            .arena-players-zone.players-5 .player-btn:nth-child(1) .pb-name,
+            .arena-players-zone.players-5 .player-btn:nth-child(1) .pb-stat,
+            .arena-players-zone.players-5 .player-btn:nth-child(1) .pb-sub,
+            .arena-players-zone.players-5 .player-btn:nth-child(2) .pb-name,
+            .arena-players-zone.players-5 .player-btn:nth-child(2) .pb-stat,
+            .arena-players-zone.players-5 .player-btn:nth-child(2) .pb-sub,
+            .arena-players-zone.players-5 .player-btn:nth-child(3) .pb-name,
+            .arena-players-zone.players-5 .player-btn:nth-child(3) .pb-stat,
+            .arena-players-zone.players-5 .player-btn:nth-child(3) .pb-sub { transform: rotate(180deg); }
         }
 
         /* ===== LEGACY STYLES (kept for compatibility) ===== */
