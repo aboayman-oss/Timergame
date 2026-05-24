@@ -34,24 +34,35 @@
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
+            min-height: 100dvh;
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 14px 14px env(safe-area-inset-bottom, 40px);
+            padding: env(safe-area-inset-top, 14px) 14px env(safe-area-inset-bottom, 14px);
             overflow-x: hidden;
             overflow-y: auto;
+            transition: padding 0.4s ease;
         }
 
+        /* ===== STATE-BASED LAYOUT ===== */
+        body.state-arena { padding: 0; overflow: hidden; }
+        body.state-transition { overflow: hidden; }
+
+        /* ===== HEADER ===== */
         .header {
             width: 100%; max-width: 500px;
             display: flex; align-items: center; justify-content: space-between;
             gap: 10px; margin-bottom: 14px;
+            transition: transform 0.4s ease, opacity 0.4s ease;
         }
+        body.state-arena .header,
+        body.state-transition .header { transform: translateY(-80px); opacity: 0; pointer-events: none; }
         .game-title {
             font-family: 'Orbitron', sans-serif;
             font-size: clamp(1.2rem, 5vw, 1.5rem); font-weight: 900;
             background: linear-gradient(90deg, var(--p1), var(--p2));
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
             text-shadow: 0 0 20px rgba(0,212,255,0.2); letter-spacing: 0.05em;
             display: inline-flex; align-items: center; gap: 10px;
         }
@@ -70,14 +81,180 @@
             vertical-align: middle; margin-right: 6px; color: inherit;
         }
 
+        /* ===== LOBBY ===== */
+        #lobby {
+            width: 100%; max-width: 500px;
+            display: flex; flex-direction: column; align-items: center; gap: 18px;
+            flex: 1; justify-content: center;
+            transition: transform 0.4s ease, opacity 0.35s ease;
+        }
+        body.state-arena #lobby,
+        body.state-transition #lobby { transform: translateY(-40px) scale(0.95); opacity: 0; pointer-events: none; position: absolute; }
+
+        .lobby-mode-grid {
+            width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+        }
+        .lobby-mode-card {
+            background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 14px 12px; cursor: pointer; text-align: center;
+            transition: all 0.2s; touch-action: manipulation;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
+        }
+        .lobby-mode-card:hover, .lobby-mode-card:active { border-color: var(--p1); background: var(--p1-dim); }
+        .lobby-mode-card.active { border-color: var(--p1); background: var(--p1-dim); box-shadow: 0 0 20px var(--p1-dim); }
+        .lobby-mode-id {
+            font-family: 'Orbitron', sans-serif; font-size: 0.65rem; font-weight: 900;
+            color: var(--p1); opacity: 0.7;
+        }
+        .lobby-mode-card.active .lobby-mode-id { opacity: 1; }
+        .lobby-mode-name { font-weight: 700; font-size: 0.82rem; color: var(--text); }
+        .lobby-mode-card.active .lobby-mode-name { color: var(--p1); }
+        .lobby-config-btn {
+            position: absolute; top: 6px; right: 6px; width: 26px; height: 26px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+            color: var(--text-dim); cursor: pointer; display: flex; align-items: center; justify-content: center;
+            font-size: 0.7rem; transition: all 0.2s; touch-action: manipulation;
+        }
+        .lobby-config-btn:hover { color: var(--p1); border-color: var(--p1); }
+        .lobby-mode-wrapper { position: relative; }
+
+        .lobby-player-selector {
+            display: flex; gap: 6px; align-items: center; justify-content: center;
+        }
+        .lobby-player-btn {
+            width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--border);
+            background: var(--surface2); color: var(--text-dim); font-family: 'Orbitron', sans-serif;
+            font-size: 1rem; font-weight: 900; cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; touch-action: manipulation;
+        }
+        .lobby-player-btn:hover { border-color: var(--p1); color: var(--p1); }
+        .lobby-player-btn.active { border-color: var(--p1); background: var(--p1-dim); color: var(--p1); box-shadow: 0 0 15px var(--p1-dim); }
+        .lobby-player-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700; letter-spacing: 0.1em; }
+
+        .lobby-start-btn {
+            width: 100%; max-width: 320px; padding: 22px 40px;
+            font-family: 'Orbitron', sans-serif; font-size: 1.4rem; font-weight: 900;
+            letter-spacing: 0.15em; text-transform: uppercase;
+            background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(167,139,250,0.2));
+            border: 2px solid var(--p1); color: var(--p1); border-radius: 16px;
+            cursor: pointer; touch-action: manipulation; position: relative; overflow: hidden;
+            transition: all 0.25s ease;
+            animation: lobbyPulse 2.5s ease-in-out infinite;
+        }
+        .lobby-start-btn:hover, .lobby-start-btn:active {
+            background: linear-gradient(135deg, rgba(0,212,255,0.35), rgba(167,139,250,0.35));
+            box-shadow: 0 0 40px var(--p1-dim), 0 0 80px rgba(0,212,255,0.1);
+            transform: scale(1.03);
+        }
+        .lobby-start-btn:active { transform: scale(0.97); }
+        @keyframes lobbyPulse {
+            0%,100% { box-shadow: 0 0 15px var(--p1-dim); }
+            50% { box-shadow: 0 0 35px var(--p1), 0 0 70px var(--p1-dim); }
+        }
+
+        /* ===== HUD (Score Strip) ===== */
+        .hud {
+            position: fixed; top: 0; left: 0; right: 0;
+            display: flex; justify-content: center; gap: 2px;
+            padding: env(safe-area-inset-top, 4px) 4px 4px;
+            z-index: 80; opacity: 0; transform: translateY(-100%);
+            transition: all 0.4s ease; pointer-events: none;
+        }
+        body.state-arena .hud { opacity: 1; transform: translateY(0); pointer-events: auto; }
+        .hud-score {
+            flex: 1; max-width: 100px; padding: 4px 8px; text-align: center;
+            background: var(--surface); border-bottom: 3px solid var(--border);
+            font-size: 0.65rem; font-weight: 700; letter-spacing: 0.03em;
+        }
+        .hud-score-name { opacity: 0.7; font-size: 0.55rem; text-transform: uppercase; }
+        .hud-score-pts { font-family: 'Orbitron', sans-serif; font-size: 0.8rem; font-weight: 900; }
+        .hud-round {
+            padding: 4px 10px; background: var(--surface); color: var(--text-dim);
+            font-size: 0.6rem; font-weight: 700; display: flex; align-items: center; gap: 4px;
+        }
+
+        /* ===== ARENA CONTAINER ===== */
+        #arena-container {
+            display: none; position: fixed; inset: 0; z-index: 50;
+            background: var(--bg); flex-direction: column;
+            padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+        }
+        body.state-arena #arena-container { display: flex; }
+
+        .arena-timer-zone {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 10px 14px; flex-shrink: 0;
+        }
+        .arena-players-zone {
+            flex: 1; display: grid; gap: 6px; padding: 6px;
+            min-height: 0;
+        }
+        /* Mobile portrait: stack players vertically */
+        .arena-players-zone.players-2 { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+        .arena-players-zone.players-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+        .arena-players-zone.players-3 .player-btn:first-child { grid-column: span 2; }
+        .arena-players-zone.players-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+        .arena-players-zone.players-5 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; }
+        .arena-players-zone.players-5 .player-btn:last-child { grid-column: span 2; }
+        .arena-players-zone.players-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+
+        /* ===== TABLET LANDSCAPE ===== */
+        @media (min-width: 768px) and (orientation: landscape) {
+            #arena-container {
+                flex-direction: row; flex-wrap: wrap;
+            }
+            .arena-timer-zone {
+                position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                z-index: 60; padding: 20px; pointer-events: none;
+                background: radial-gradient(ellipse, var(--bg) 60%, transparent 100%);
+                border-radius: 50%; width: 280px; height: 200px;
+            }
+            .arena-timer-zone * { pointer-events: auto; }
+            .arena-players-zone {
+                position: absolute; inset: 0;
+                padding: 12px;
+            }
+            .arena-players-zone.players-2 {
+                grid-template-columns: 1fr 1fr; grid-template-rows: 1fr;
+            }
+            .arena-players-zone.players-2 .player-btn:first-child { border-radius: 16px 0 0 16px; }
+            .arena-players-zone.players-2 .player-btn:last-child { border-radius: 0 16px 16px 0; }
+            .arena-players-zone.players-3 {
+                grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+            }
+            .arena-players-zone.players-3 .player-btn:first-child { grid-column: span 2; }
+            .arena-players-zone.players-4 {
+                grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+            }
+            .arena-players-zone.players-5 {
+                grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr;
+            }
+            .arena-players-zone.players-5 .player-btn:nth-child(4) { grid-column: 1 / 2; }
+            .arena-players-zone.players-5 .player-btn:nth-child(5) { grid-column: 2 / 4; }
+
+            /* Radial text rotation for tablet */
+            .arena-players-zone.players-4 .player-btn:nth-child(1),
+            .arena-players-zone.players-4 .player-btn:nth-child(2),
+            .arena-players-zone.players-3 .player-btn:first-child { transform: rotate(180deg); }
+            .arena-players-zone.players-4 .player-btn:nth-child(1) .pb-name,
+            .arena-players-zone.players-4 .player-btn:nth-child(1) .pb-stat,
+            .arena-players-zone.players-4 .player-btn:nth-child(1) .pb-sub,
+            .arena-players-zone.players-4 .player-btn:nth-child(2) .pb-name,
+            .arena-players-zone.players-4 .player-btn:nth-child(2) .pb-stat,
+            .arena-players-zone.players-4 .player-btn:nth-child(2) .pb-sub,
+            .arena-players-zone.players-3 .player-btn:first-child .pb-name,
+            .arena-players-zone.players-3 .player-btn:first-child .pb-stat,
+            .arena-players-zone.players-3 .player-btn:first-child .pb-sub { transform: rotate(180deg); }
+        }
+
+        /* ===== LEGACY STYLES (kept for compatibility) ===== */
         .mode-btn {
             background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim);
             height: 42px; padding: 0 14px; border-radius: 10px; cursor: pointer;
-            display: flex; align-items: center; gap: 6px; font-family: 'Exo 2', sans-serif;
+            display: none; align-items: center; gap: 6px; font-family: 'Exo 2', sans-serif;
             font-weight: 700; font-size: 0.82rem; transition: all 0.2s; touch-action: manipulation;
             white-space: nowrap;
         }
-        .mode-btn:hover, .mode-btn:active { background: var(--p1-dim); color: var(--p1); border-color: var(--p1); }
         .mode-btn-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 
         .mode-list { display: grid; gap: 8px; }
@@ -101,7 +278,7 @@
 
         .scoreboard {
             width: 100%; max-width: 500px;
-            display: flex; justify-content: space-evenly; flex-wrap: wrap; gap: 8px;
+            display: none; justify-content: space-evenly; flex-wrap: wrap; gap: 8px;
             margin-bottom: 10px;
         }
         .score-card {
@@ -114,7 +291,7 @@
         .score-pts { font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 900; }
 
         .round-progress {
-            width: 100%; max-width: 500px; display: flex; justify-content: center; gap: 8px;
+            width: 100%; max-width: 500px; display: none; justify-content: center; gap: 8px;
             margin-bottom: 12px; min-height: 10px;
         }
         .round-pip {
@@ -129,8 +306,9 @@
             background: var(--surface); border: 1px solid var(--border);
             border-radius: var(--radius-lg); padding: 18px;
             box-shadow: 0 8px 40px rgba(0,0,0,0.6); position: relative;
-            touch-action: manipulation;
+            touch-action: manipulation; display: none;
         }
+        body.state-arena .game-container { display: none; }
 
         .config-area {
             background: var(--surface2); border: 1px solid var(--border);
@@ -192,14 +370,14 @@
         @keyframes pulseDanger { from { transform: scale(1); } to { transform: scale(1.05); } }
         @keyframes cdPop { from { transform:scale(0.45); opacity:0.2; } to { transform:scale(1); opacity:1; } }
 
-        .arena { display: grid; gap: 10px; margin-top: 10px; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+        .arena { display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
         .arena.hidden { display: none; }
         .player-btn {
             background: var(--surface2); border: 2px solid var(--border); color: var(--text);
             border-radius: var(--radius); padding: 16px 8px; cursor: pointer;
             display: flex; flex-direction: column; align-items: center; gap: 6px;
-            transition: all 0.1s; position: relative; overflow: hidden; touch-action: pan-y;
-            min-height: 90px; justify-content: center;
+            transition: all 0.1s; position: relative; overflow: hidden; touch-action: manipulation;
+            min-height: 80px; justify-content: center;
         }
         .player-btn.active { border-color: currentColor; box-shadow: 0 0 15px currentColor; transform: scale(1.02); }
         .player-btn:active:not(:disabled) { transform: scale(0.95); }
@@ -349,49 +527,73 @@
         @media (max-width: 400px) {
             .game-container { padding: 14px; }
             .stopwatch-display { font-size: 2.5rem; }
-            .mode-btn-label { max-width: 90px; }
+            .lobby-mode-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
-<body>
+<body class="state-lobby">
     <div class="header">
         <div class="game-title" id="game-title"></div>
         <div class="header-actions">
             <button class="mode-btn" onclick="openModes()" aria-label="Select game mode" id="mode-btn">
                 <span id="mode-btn-label" class="mode-btn-label"></span>
-                <svg viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </button>
             <button class="icon-btn" onclick="openHelp()" aria-label="How to play">?</button>
             <button class="icon-btn" onclick="openSettings()" aria-label="Settings" id="settings-btn"></button>
         </div>
     </div>
 
+    <!-- LOBBY STATE -->
+    <div id="lobby">
+        <div class="lobby-mode-grid" id="lobby-mode-grid"></div>
+        <div style="text-align:center;">
+            <div class="lobby-player-label">PLAYERS</div>
+            <div class="lobby-player-selector" id="lobby-player-selector"></div>
+        </div>
+        <button class="lobby-start-btn" id="lobby-start-btn" onclick="handleLobbyStart(event)">▶ START</button>
+    </div>
+
+    <!-- HUD (shown during arena) -->
+    <div class="hud" id="hud"></div>
+
+    <!-- ARENA CONTAINER (fullscreen during gameplay) -->
+    <div id="arena-container">
+        <div class="arena-timer-zone" id="arena-timer-zone">
+            <div class="status-text" id="status-text">Ready to play!</div>
+            <div class="stopwatch-display" id="display">00.000</div>
+            <div id="heartbeat-indicator" style="display:none;width:20px;height:20px;border-radius:50%;background:var(--p1);margin:0 auto 10px;"></div>
+            <div class="guess-stage" id="guess-stage">
+                <h3 id="guess-prompt" style="color:var(--text-dim);font-size:0.8rem;text-transform:uppercase;margin-bottom:8px;">Guess</h3>
+                <div id="guess-inputs-all"></div>
+                <input type="number" class="guess-input" id="guess-input" placeholder="0.000" step="0.001" min="0" style="display:none;">
+                <button class="btn btn-primary" onclick="submitGuess(event)" style="padding:12px;font-size:0.9rem;" id="guess-confirm-btn">Confirm</button>
+            </div>
+            <div id="main-action">
+                <button class="btn btn-primary" onclick="handleMainAction(event)" id="main-btn"></button>
+            </div>
+            <div class="restart-wrap"><a class="restart-link" id="restart-link" onclick="quickRestart(event)">↺ Restart Match</a></div>
+            <div class="result-panel" id="result-panel"></div>
+            <div class="kb-hint" id="kb-hint"></div>
+        </div>
+        <div class="arena-players-zone" id="arena"></div>
+    </div>
+
+    <!-- Hidden: scoreboard and round-progress for internal state -->
     <div class="scoreboard" id="scoreboard"></div>
     <div class="round-progress" id="round-progress"></div>
-
-    <div class="game-container" id="game-container">
+    <!-- Hidden: config-area and game-container for mode config rendering -->
+    <div class="game-container" id="game-container" style="display:none;">
         <div id="config-area" class="config-area"></div>
+    </div>
 
-        <div class="status-text" id="status-text">Ready to play!</div>
-        <div class="stopwatch-display" id="display">00.000</div>
-        <div id="heartbeat-indicator" style="display:none;width:20px;height:20px;border-radius:50%;background:var(--p1);margin:0 auto 10px;"></div>
-
-        <div class="guess-stage" id="guess-stage">
-            <h3 id="guess-prompt" style="color:var(--text-dim);font-size:0.8rem;text-transform:uppercase;margin-bottom:8px;">Guess</h3>
-            <div id="guess-inputs-all"></div>
-            <input type="number" class="guess-input" id="guess-input" placeholder="0.000" step="0.001" min="0" style="display:none;">
-            <button class="btn btn-primary" onclick="submitGuess(event)" style="padding:12px;font-size:0.9rem;" id="guess-confirm-btn">Confirm</button>
+    <!-- Advanced Config Modal (triggered from lobby) -->
+    <div class="modal-backdrop" id="config-modal" aria-hidden="true" onclick="bgClick(event, 'config-modal')">
+        <div class="modal-sheet">
+            <div class="modal-handle"></div>
+            <div style="font-size:1.2rem;font-weight:900;margin-bottom:10px;">MODE CONFIG</div>
+            <div id="config-modal-body" class="config-area" style="border:none;padding:0;background:transparent;"></div>
+            <button class="btn btn-outline" onclick="closeConfigModal()" style="margin-top:10px;">Done</button>
         </div>
-
-        <div class="arena hidden" id="arena"></div>
-
-        <div id="main-action">
-            <button class="btn btn-primary" onclick="handleMainAction(event)" id="main-btn"></button>
-        </div>
-        <div class="restart-wrap"><a class="restart-link" id="restart-link" onclick="quickRestart(event)">↺ Restart Match</a></div>
-
-        <div class="result-panel" id="result-panel"></div>
-        <div class="kb-hint" id="kb-hint"></div>
     </div>
 
     <div class="modal-backdrop" id="settings-modal" aria-hidden="true" onclick="bgClick(event, 'settings-modal')">
@@ -817,7 +1019,7 @@
         target.appendChild(r);
         setTimeout(() => r.remove(), 500);
     }
-    function shakeUI() { el('game-container').classList.add('shake'); setTimeout(() => el('game-container').classList.remove('shake'), 400); }
+    function shakeUI() { el('arena-container').classList.add('shake'); setTimeout(() => el('arena-container').classList.remove('shake'), 400); }
     function spawnConfetti() {
         const c = el('particles');
         for (let i = 0; i < 40; i++) {
@@ -902,6 +1104,110 @@
         }
     }
 
+    function setGameState(state) {
+        document.body.classList.remove('state-lobby', 'state-transition', 'state-arena');
+        document.body.classList.add(`state-${state}`);
+        if (state === 'arena') {
+            // Request fullscreen
+            try {
+                const docEl = document.documentElement;
+                if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
+                else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+            } catch(e) {}
+            // Wake Lock
+            requestWakeLock();
+        } else if (state === 'lobby') {
+            releaseWakeLock();
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+    }
+
+    let _wakeLock = null;
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                _wakeLock = await navigator.wakeLock.request('screen');
+            }
+        } catch(e) {}
+    }
+    function releaseWakeLock() {
+        if (_wakeLock) { _wakeLock.release().catch(() => {}); _wakeLock = null; }
+    }
+
+    function buildLobby() {
+        // Mode grid
+        const modeGrid = el('lobby-mode-grid');
+        modeGrid.innerHTML = Object.entries(MODES).map(([id, mode]) => (
+            `<div class="lobby-mode-wrapper">
+                <div class="lobby-mode-card${Number(id) === currentMode ? ' active' : ''}" data-mode-id="${id}" onclick="selectLobbyMode(${id})">
+                    <div class="lobby-mode-id">M${id}</div>
+                    <div class="lobby-mode-name">${safe(mode.short)}</div>
+                </div>
+                <button class="lobby-config-btn" onclick="event.stopPropagation();selectLobbyMode(${id});openConfigModal()" title="Configure">⚙</button>
+            </div>`
+        )).join('');
+
+        // Player selector
+        const pSelector = el('lobby-player-selector');
+        pSelector.innerHTML = [1,2,3,4,5].map(n => (
+            `<button class="lobby-player-btn${n === playerCount ? ' active' : ''}" onclick="setLobbyPlayerCount(${n})">${n}</button>`
+        )).join('');
+    }
+
+    function selectLobbyMode(m) {
+        currentMode = Number(m);
+        document.querySelectorAll('.lobby-mode-card').forEach(card => {
+            card.classList.toggle('active', Number(card.dataset.modeId) === currentMode);
+        });
+        document.querySelectorAll('.mode-card').forEach(card => {
+            card.classList.toggle('active', Number(card.dataset.modeId) === currentMode);
+        });
+        updateModeBtnLabel();
+        renderModeConfig();
+        savePrefs();
+    }
+
+    function setLobbyPlayerCount(n) {
+        playerCount = clamp(n, 1, 5);
+        syncPlayerFlags();
+        document.querySelectorAll('.lobby-player-btn').forEach((btn, i) => {
+            btn.classList.toggle('active', i + 1 === playerCount);
+        });
+        el('s-pcount').value = String(playerCount);
+        buildSettings();
+        savePrefs();
+    }
+
+    function handleLobbyStart(e) {
+        if (e) ripple(e, el('lobby-start-btn'));
+        // Transition: lobby → arena
+        setGameState('transition');
+        setTimeout(() => {
+            setGameState('arena');
+            renderHud();
+            startCountdown();
+        }, 400);
+    }
+
+    function renderHud() {
+        const hud = el('hud');
+        const currentPlayers = realActivePlayers();
+        const maxScore = Math.max(...currentPlayers.map(p => p.score), 0);
+        hud.innerHTML = currentPlayers.map(p => `
+            <div class="hud-score" style="border-bottom-color:var(${p.var})">
+                <div class="hud-score-name" style="color:var(${p.var})">${safe(p.name)}</div>
+                <div class="hud-score-pts">${p.score}</div>
+            </div>`).join('') +
+            `<div class="hud-round">R${currentRound}/${totalRounds}</div>`;
+    }
+
+    function returnToLobby() {
+        setGameState('lobby');
+        buildLobby();
+    }
+
     function buildStaticUi() {
         el('game-title').innerHTML = `${ICONS.timer} HIDDEN CLOCK`;
         el('settings-btn').innerHTML = ICONS.gear;
@@ -928,6 +1234,8 @@
                 <h4>M${id} — ${safe(mode.n)}</h4>
                 <p>${safe(mode.desc)}</p>
             </div>`).join('');
+
+        buildLobby();
     }
 
     function buildSettings() {
@@ -1028,6 +1336,9 @@
         document.querySelectorAll('.mode-card').forEach(card => {
             card.classList.toggle('active', Number(card.dataset.modeId) === currentMode);
         });
+        document.querySelectorAll('.lobby-mode-card').forEach(card => {
+            card.classList.toggle('active', Number(card.dataset.modeId) === currentMode);
+        });
         updateModeBtnLabel();
         renderModeConfig();
         savePrefs();
@@ -1054,6 +1365,8 @@
         modeData = {};
         arena.classList.add('hidden');
         arena.innerHTML = '';
+        arena.className = 'arena-players-zone players-' + playerCount;
+        arena.classList.add('hidden');
         el('guess-stage').classList.remove('show');
         el('guess-inputs-all').innerHTML = '';
         el('guess-input').style.display = 'none';
@@ -1068,10 +1381,10 @@
         display.style.color = '';
         statusText.style.color = '';
         statusText.textContent = `Round ${currentRound} / ${totalRounds}`;
-        setMainButton('START');
+        setMainButton('NEXT ROUND');
         el('restart-link').classList.remove('show');
-        el('game-container').classList.remove('pulse-glow');
-        el('game-container').style.background = '';
+        el('arena-container').classList.remove('pulse-glow');
+        el('arena-container').style.background = '';
         el('heartbeat-indicator').style.display = 'none';
         el('heartbeat-indicator').classList.remove('heartbeat-pulse');
         const echoTrack = el('echo-bar-track');
@@ -1080,6 +1393,7 @@
         if (replayBtn) replayBtn.remove();
         renderScoreboard();
         renderProgress();
+        renderHud();
         updateKbHint();
     }
 
@@ -1102,6 +1416,7 @@
 
     function renderArena(ids = realActivePlayers().map(p => p.id), subtitleFn = p => `Tap or ${KEYS[p.id - 1].toUpperCase()}`, statFn = () => 'READY') {
         arena.innerHTML = '';
+        arena.className = `arena-players-zone players-${ids.length}`;
         ids.forEach(id => {
             const p = players.find(player => player.id === id);
             if (!p) return;
@@ -1168,14 +1483,20 @@
         if (e) ripple(e, mainBtn);
         if (gs === STATE.MENU) startCountdown();
         else if (gs === STATE.RESULT) {
-            if (currentRound > totalRounds) resetMatch();
-            else resetUI();
+            if (currentRound > totalRounds) {
+                resetMatch();
+                returnToLobby();
+            } else {
+                resetUI();
+                startCountdown();
+            }
         }
     }
 
     function quickRestart(e) {
         if (e) e.preventDefault();
         resetMatch();
+        returnToLobby();
     }
 
     function arenaTap(pId, e) {
@@ -1257,7 +1578,7 @@
                     display.textContent = 'TIME\'S UP';
                     showToast('Type your guess and press Lock!', 'var(--success)');
                     // Build manual input UI for each player
-                    arena.classList.remove('hidden');
+                    arena.className = `arena-players-zone players-${realActivePlayers().length}`;
                     arena.innerHTML = '';
                     realActivePlayers().forEach(p => {
                         const card = document.createElement('div');
@@ -1346,7 +1667,7 @@
             modeData.done = 0;
             display.textContent = '??.???';
             display.classList.add('hidden-timer');
-            el('game-container').classList.add('pulse-glow');
+            el('arena-container').classList.add('pulse-glow');
             showToast(`Target: ${fmt(modeData.target)}s`);
             renderArena(ids);
             updateKbHint();
@@ -1354,8 +1675,8 @@
                 modeData.distractInterval = addInterval(() => {
                     if (gs !== STATE.RUNNING) return;
                     if (Math.random() < 0.4) {
-                        el('game-container').classList.add('distraction-flash');
-                        setTimeout(() => el('game-container').classList.remove('distraction-flash'), 150);
+                        el('arena-container').classList.add('distraction-flash');
+                        setTimeout(() => el('arena-container').classList.remove('distraction-flash'), 150);
                     }
                     if (Math.random() < 0.25) shakeUI();
                 }, 1500 + Math.random() * 2000);
@@ -1459,7 +1780,7 @@
                     bombUnlockPass();
                 }
 
-                const gc = el('game-container');
+                const gc = el('arena-container');
                 const extraHold = Math.max(0, holdDuration - modeData.minHold);
 
                 // Option 3: Sensory Overload — punish greedy holding past minHold
@@ -2020,6 +2341,25 @@
     function closeHelp() { setModalState('help-modal', false); }
     function openModes() { setModalState('modes-modal', true); }
     function closeModes() { setModalState('modes-modal', false); }
+    function openConfigModal() {
+        // Copy config content from hidden config-area into modal
+        const body = el('config-modal-body');
+        body.innerHTML = el('config-area').innerHTML;
+        setModalState('config-modal', true);
+    }
+    function closeConfigModal() {
+        // Sync values back from modal to hidden config-area
+        const modalBody = el('config-modal-body');
+        const configArea = el('config-area');
+        modalBody.querySelectorAll('input, select').forEach(input => {
+            const original = configArea.querySelector(`#${input.id}`);
+            if (original) {
+                if (input.type === 'checkbox') original.checked = input.checked;
+                else original.value = input.value;
+            }
+        });
+        setModalState('config-modal', false);
+    }
     function bgClick(event, id) { if (event.target === el(id)) setModalState(id, false); }
 
     function showEndScreen(html) {
@@ -2033,6 +2373,7 @@
         saveMatchState();
         renderScoreboard();
         renderProgress();
+        renderHud();
         el('main-action').style.display = 'block';
         el('restart-link').classList.add('show');
         if (currentRound > totalRounds) {
@@ -2084,7 +2425,7 @@
             display.className = 'stopwatch-display';
             display.textContent = fmt(target);
             display.style.color = '';
-            el('game-container').classList.remove('pulse-glow');
+            el('arena-container').classList.remove('pulse-glow');
             const titleMap = {
                 2: 'Target',
                 5: 'Target',
@@ -2099,7 +2440,7 @@
                 const flashDiv = document.createElement('div');
                 flashDiv.className = 'rankings-flash';
                 flashDiv.innerHTML = `<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">TAP ORDER</div>${rankHtml}`;
-                el('game-container').appendChild(flashDiv);
+                el('arena-container').appendChild(flashDiv);
                 setTimeout(() => flashDiv.remove(), 2000);
             }
 
@@ -2192,6 +2533,11 @@
         if (inputLocked) return;
         if (k === ' ' || event.code === 'Space') {
             event.preventDefault();
+            // If in lobby state, start the game
+            if (document.body.classList.contains('state-lobby') && gs === STATE.MENU) {
+                handleLobbyStart();
+                return;
+            }
             if (gs === STATE.MENU || gs === STATE.RESULT) handleMainAction();
             else if (gs === STATE.GUESSING) submitGuess();
             return;
@@ -2223,8 +2569,14 @@
         buildSettings();
         el('s-rounds').value = String(totalRounds);
         renderModeConfig();
-        resetUI();
-        if (recoveredMatch) showToast('Match recovered!', 'var(--success)');
+        setGameState('lobby');
+        if (recoveredMatch) {
+            // Resume into arena state
+            setGameState('arena');
+            renderHud();
+            resetUI();
+            showToast('Match recovered!', 'var(--success)');
+        }
     }
 
     init();
