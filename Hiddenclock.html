@@ -120,7 +120,7 @@
         body.state-transition #lobby { transform: translateY(-40px) scale(0.95); opacity: 0; pointer-events: none; position: absolute; }
 
         .lobby-mode-grid {
-            width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+            width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;
         }
         .lobby-mode-card {
             background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
@@ -676,7 +676,9 @@
     <div class="round-progress" id="round-progress"></div>
     <!-- Hidden: config-area and game-container for mode config rendering -->
     <div class="game-container" id="game-container" style="display:none;">
-        <div id="config-area" class="config-area"></div>
+        <div id="config-hidden-host">
+            <div id="config-area" class="config-area"></div>
+        </div>
     </div>
 
     <!-- Advanced Config Modal (triggered from lobby) -->
@@ -684,7 +686,7 @@
         <div class="modal-sheet">
             <div class="modal-handle"></div>
             <div style="font-size:1.2rem;font-weight:900;margin-bottom:10px;">MODE CONFIG</div>
-            <div id="config-modal-body" class="config-area" style="border:none;padding:0;background:transparent;"></div>
+            <div id="config-modal-body" style="border:none;padding:0;background:transparent;"></div>
             <button class="btn btn-outline" onclick="closeConfigModal()" style="margin-top:10px;">Done</button>
         </div>
     </div>
@@ -1719,7 +1721,7 @@
                     arena.innerHTML = '';
                     realActivePlayers().forEach(p => {
                         const card = document.createElement('div');
-                        card.className = 'player-zone';
+                        card.className = 'player-btn';
                         card.style.setProperty('--zone-color', `var(${p.var})`);
                         card.innerHTML = `
                             <div class="zone-name" style="color:var(${p.var})">${safe(p.name)}</div>
@@ -2502,22 +2504,17 @@
     function openModes() { setModalState('modes-modal', true); }
     function closeModes() { setModalState('modes-modal', false); }
     function openConfigModal() {
-        // Copy config content from hidden config-area into modal
+        // Move the original config-area into the modal so changes apply directly
         const body = el('config-modal-body');
-        body.innerHTML = el('config-area').innerHTML;
+        const configArea = el('config-area');
+        body.appendChild(configArea);
         setModalState('config-modal', true);
     }
     function closeConfigModal() {
-        // Sync values back from modal to hidden config-area
-        const modalBody = el('config-modal-body');
+        // Move config-area back to its original hidden container
         const configArea = el('config-area');
-        modalBody.querySelectorAll('input, select').forEach(input => {
-            const original = configArea.querySelector(`#${input.id}`);
-            if (original) {
-                if (input.type === 'checkbox') original.checked = input.checked;
-                else original.value = input.value;
-            }
-        });
+        const hiddenHost = el('config-hidden-host');
+        hiddenHost.appendChild(configArea);
         setModalState('config-modal', false);
     }
     function bgClick(event, id) { if (event.target === el(id)) setModalState(id, false); }
