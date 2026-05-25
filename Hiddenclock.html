@@ -1022,7 +1022,7 @@
         },
         3: {
             n: 'Relay', short: 'Relay',
-            desc: 'Players take turns hitting checkpoints in sequence. Easy/Medium use Individual Laps (timer resets each turn). Hard uses Master Sabotage — the continuous timer means early or late taps shift the next player\'s window.',
+            desc: 'Pass the baton! Players take turns hitting hidden targets in sequence. Your error carries forward to the next player — gently on Easy, seriously on Medium, brutally on Hard. Clean handoffs earn bonus points for the whole team.',
             config: `
                 <div class="difficulty-presets">
                     <button class="preset-btn active" data-preset="easy" onclick="applyPreset(3, 'easy')">Easy</button>
@@ -1037,7 +1037,7 @@
                     <div class="config-item"><label>Min Target (s)</label><input type="number" id="m3-min" value="2.5" step="0.1" min="0.5" max="10"></div>
                     <div class="config-item"><label>Max Target (s)</label><input type="number" id="m3-max" value="5" step="0.1" min="1" max="12"></div>
                     <div class="config-item"><label>Laps</label><input type="number" id="m3-laps" value="2" min="1" max="10" step="1"></div>
-                    <div class="config-note">Hard difficulty automatically activates Master Sabotage mode.</div>
+                    <div class="config-note">Carry-forward: Easy 20%, Medium 50%, Hard 100%. Final lap doubles the rate.</div>
                 </div>`
         },
         4: {
@@ -2328,14 +2328,17 @@
             modeData.minTarget = minTarget * 1000;
             modeData.maxTarget = maxTarget * 1000;
             modeData.laps = clamp(parseInt(el('m3-laps').value, 10) || 2, 1, 10);
-            // Variant determined by difficulty: Hard → sabotage, Easy/Medium → individual
-            modeData.variant = currentDifficulty === 'hard' ? 'sabotage' : 'individual';
+            // Carry-forward rates by difficulty
+            const cfRates = { easy: 0.20, medium: 0.50, hard: 1.00 };
+            modeData.carryForwardRate = cfRates[currentDifficulty] || 0.20;
+            modeData.bigMissPenalty = currentDifficulty === 'hard'; // Hard: prep window cut on big miss
             modeData.roundMax = realActivePlayers().length * modeData.laps;
             modeData.turnIndex = 0;
             modeData.scores = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.turns = [];
-            modeData.masterElapsed = 0;
-            modeData.cumulativeTarget = 0;
+            modeData.previousError = 0; // signed error from previous player (ms)
+            modeData.previousBigMiss = false; // whether previous player missed by >0.5s
+            modeData.lapCleanChain = {}; // track if all taps in a lap are clean
             renderArena(ids, p => `Tap or ${KEYS[p.id - 1].toUpperCase()}`, () => '0 pts');
             relaySetTurn();
             updateKbHint();
@@ -2840,32 +2843,93 @@
         return snapToDifficulty(rand(modeData.minTarget, modeData.maxTarget));
     }
 
+    function relayGetCarryRate() {
+        const actives = realActivePlayers();
+        const lap = Math.floor(modeData.turnIndex / actives.length) + 1;
+        let rate = modeData.carryForwardRate;
+        // Final lap: double the carry-forward rate (capped at 1.0)
+        if (lap === modeData.laps) {
+            rate = Math.min(rate * 2, 1.0);
+        }
+        return rate;
+    }
+
     function relaySetTurn() {
         const actives = realActivePlayers();
         if (modeData.turnIndex >= modeData.roundMax) { addTimeout(endRound, 250); return; }
         const current = actives[modeData.turnIndex % actives.length];
         const lap = Math.floor(modeData.turnIndex / actives.length) + 1;
-        const target = relayTargetForTurn();
-        modeData.currId = current.id;
-        modeData.currTarget = target;
+        const baseTarget = relayTargetForTurn();
 
-        if (modeData.variant === 'sabotage') {
-            modeData.cumulativeTarget += target;
-            if (modeData.turnIndex === 0) {
-                modeData.sabotageStart = performance.now();
-            }
-            startTime = modeData.sabotageStart;
+        // Apply carry-forward offset from previous player's error
+        const cfRate = relayGetCarryRate();
+        const inherited = modeData.previousError * cfRate;
+        const effectiveTarget = Math.max(500, baseTarget + inherited); // min 0.5s effective target
+
+        modeData.currId = current.id;
+        modeData.currBaseTarget = baseTarget;
+        modeData.currEffectiveTarget = effectiveTarget;
+        modeData.currInherited = inherited;
+
+        // Determine handoff display duration (1.5s default, 0.75s if previous big miss on Hard)
+        const handoffDuration = (modeData.bigMissPenalty && modeData.previousBigMiss) ? 750 : 1500;
+
+        // Show handoff flash to incoming player
+        const inheritedSec = (Math.abs(inherited) / 1000).toFixed(2);
+        let handoffMsg;
+        if (modeData.turnIndex === 0) {
+            handoffMsg = ''; // first player has no handoff
+        } else if (Math.abs(inherited) < 30) {
+            handoffMsg = '✅ Clean handoff';
+        } else if (modeData.bigMissPenalty && modeData.previousBigMiss) {
+            const sign = inherited > 0 ? '+' : '−';
+            handoffMsg = `🔥 ${sign}${inheritedSec}s inherited — RUSHED HANDOFF`;
         } else {
-            startTime = performance.now();
+            const sign = inherited > 0 ? '+' : '−';
+            const hint = inherited > 0 ? '(tap later)' : '(tap earlier)';
+            handoffMsg = `⚠️ Inherited: ${sign}${inheritedSec}s ${hint}`;
         }
 
+        // Initialize lap clean chain tracking
+        if (modeData.turnIndex % actives.length === 0) {
+            modeData.lapCleanChain[lap] = true;
+        }
+
+        // Final lap announcement
+        if (lap === modeData.laps && modeData.turnIndex % actives.length === 0) {
+            showToast('🏁 FINAL LAP — Errors carry harder', 'var(--warn)');
+        }
+
+        // Show handoff then start the turn
+        if (handoffMsg && modeData.turnIndex > 0) {
+            // Show handoff info briefly
+            display.className = 'stopwatch-display';
+            display.textContent = handoffMsg;
+            actives.forEach(p => {
+                const btn = el(`btn-p${p.id}`);
+                btn.disabled = true;
+                btn.classList.remove('active', 'pulse-active');
+            });
+            addTimeout(() => {
+                relayBeginActiveTurn(current, lap, actives, effectiveTarget, inherited, handoffDuration);
+            }, handoffDuration);
+        } else {
+            relayBeginActiveTurn(current, lap, actives, effectiveTarget, inherited, 0);
+        }
+    }
+
+    function relayBeginActiveTurn(current, lap, actives, effectiveTarget, inherited, handoffDuration) {
+        startTime = performance.now();
         setHiddenTimer();
 
-        if (modeData.variant === 'sabotage') {
-            const cTarget = modeData.cumulativeTarget;
-            showToast(`Lap ${lap}/${modeData.laps} • ${current.name} • Target ${fmt(cTarget)}s (cumulative)`, `var(${current.var})`);
+        // Toast with target info
+        const targetSec = (effectiveTarget / 1000).toFixed(1);
+        if (Math.abs(inherited) >= 30) {
+            const inheritSec = (inherited / 1000).toFixed(2);
+            const sign = inherited > 0 ? '+' : '';
+            showToast(`Lap ${lap}/${modeData.laps} • ${current.name} • Target ~${targetSec}s (${sign}${inheritSec}s inherited)`, `var(${current.var})`);
         } else {
-            showToast(`Lap ${lap}/${modeData.laps} • ${current.name} • Target ${fmt(target)}s`, `var(${current.var})`);
+            showToast(`Lap ${lap}/${modeData.laps} • ${current.name} • Target ~${targetSec}s`, `var(${current.var})`);
         }
 
         actives.forEach(p => {
@@ -2898,21 +2962,40 @@
     function relayHit(pId) {
         if (pId !== modeData.currId) return;
         const elapsed = performance.now() - startTime;
+        const effectiveTarget = modeData.currEffectiveTarget;
 
-        let diff, tapTiming;
-        if (modeData.variant === 'sabotage') {
-            const cTarget = modeData.cumulativeTarget;
-            diff = Math.abs(cTarget - elapsed);
-            tapTiming = elapsed < cTarget ? 'EARLY' : (elapsed > cTarget ? 'LATE' : 'PERFECT');
-            modeData.lastTapElapsed = elapsed;
-        } else {
-            diff = Math.abs(modeData.currTarget - elapsed);
-            tapTiming = elapsed < modeData.currTarget ? 'EARLY' : (elapsed > modeData.currTarget ? 'LATE' : 'PERFECT');
-        }
+        // Signed error: positive = late, negative = early
+        const signedError = elapsed - effectiveTarget;
+        const diff = Math.abs(signedError);
+        const tapTiming = diff < 16 ? 'PERFECT' : (signedError < 0 ? 'EARLY' : 'LATE');
 
         const res = getPts(diff, 1000, 0.6, pId);
         modeData.scores[pId] += res.p;
-        modeData.turns.push({ pId, elapsed, diff, res, target: modeData.variant === 'sabotage' ? modeData.cumulativeTarget : modeData.currTarget, tapTiming });
+
+        // Store signed error for carry-forward to next player
+        modeData.previousError = signedError;
+        modeData.previousBigMiss = diff > 500; // >0.5s is a big miss
+
+        // Check if this tap breaks the clean chain for the current lap
+        const actives = realActivePlayers();
+        const lap = Math.floor(modeData.turnIndex / actives.length) + 1;
+        if (diff > 100) { // >0.1s breaks clean chain
+            modeData.lapCleanChain[lap] = false;
+        }
+
+        // Calculate what was passed to next player
+        const cfRate = relayGetCarryRate();
+        const passed = signedError * cfRate;
+        const passedSec = (Math.abs(passed) / 1000).toFixed(2);
+        const passedLabel = Math.abs(passed) < 30 ? 'clean' : ((passed > 0 ? '+' : '−') + passedSec + 's');
+
+        modeData.turns.push({
+            pId, elapsed, diff, res,
+            baseTarget: modeData.currBaseTarget,
+            effectiveTarget,
+            inherited: modeData.currInherited,
+            signedError, passed, tapTiming
+        });
 
         const stat = el(`stat-p${pId}`);
         const sub = el(`sub-p${pId}`);
@@ -2921,14 +3004,11 @@
         if (sub) {
             const indicator = tapTiming === 'EARLY' ? '⚡ EARLY' : (tapTiming === 'LATE' ? '🐢 LATE' : '✓ ON TIME');
             sub.style.color = tapTiming === 'EARLY' ? 'var(--warn)' : (tapTiming === 'LATE' ? 'var(--danger)' : 'var(--success)');
-            // For Hard (Sabotage), also show how this tap shifted the next player's window
-            if (modeData.variant === 'sabotage' && modeData.turnIndex + 1 < modeData.roundMax) {
-                const shift = modeData.cumulativeTarget - elapsed;
-                const shiftAbs = (Math.abs(shift) / 1000).toFixed(2);
-                const shiftLabel = Math.abs(shift) > 50
-                    ? (shift > 0 ? ` • +${shiftAbs}s on next` : ` • −${shiftAbs}s from next`)
-                    : '';
-                sub.textContent = indicator + shiftLabel;
+            // Show what was passed to next player
+            if (modeData.turnIndex + 1 < modeData.roundMax) {
+                const nextIdx = (modeData.turnIndex + 1) % actives.length;
+                const nextPlayer = actives[nextIdx];
+                sub.textContent = `${indicator} • Passed to ${nextPlayer.name}: ${passedLabel}`;
             } else {
                 sub.textContent = indicator;
             }
@@ -2944,7 +3024,22 @@
             const rFlash = res.p >= 900 ? 'perfect-flash' : (res.p >= 300 ? 'good-flash' : '');
             if (rFlash) { relayBtn.classList.add(rFlash); setTimeout(() => relayBtn.classList.remove(rFlash), 580); }
         }
+
         modeData.turnIndex += 1;
+
+        // Check for clean chain bonus at end of each lap
+        const newLap = Math.floor(modeData.turnIndex / actives.length) + 1;
+        if (newLap !== lap || modeData.turnIndex >= modeData.roundMax) {
+            // We just finished a lap
+            if (modeData.lapCleanChain[lap]) {
+                // Award +150 to all players
+                const bonus = 150;
+                actives.forEach(p => { modeData.scores[p.id] += bonus; });
+                showToast('🔗 CLEAN LAP — +150 all', 'var(--success)');
+                modeData.cleanChainBonuses = (modeData.cleanChainBonuses || 0) + bonus;
+            }
+        }
+
         if (modeData.turnIndex >= modeData.roundMax) addTimeout(endRound, 350);
         else addTimeout(relaySetTurn, 180);
     }
@@ -3371,21 +3466,29 @@
         if (currentMode === 3) {
             display.className = 'stopwatch-display';
             display.textContent = 'DONE';
-            const variantLabel = modeData.variant === 'sabotage' ? 'Master Sabotage' : 'Individual Laps';
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Relay complete — ${variantLabel} — ${modeData.laps} lap${modeData.laps === 1 ? '' : 's'}.</div><div class="result-grid">`;
+            const diffLabel = currentDifficulty.charAt(0).toUpperCase() + currentDifficulty.slice(1);
+            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Relay complete — ${diffLabel} — ${modeData.laps} lap${modeData.laps === 1 ? '' : 's'}.</div>`;
+            if (modeData.cleanChainBonuses) {
+                html += `<div style="margin-bottom:8px;color:var(--success)">🔗 Clean Chain Bonuses: +${modeData.cleanChainBonuses} per player</div>`;
+            }
+            html += `<div class="result-grid">`;
             realActivePlayers().forEach(p => {
                 const pts = modeData.scores[p.id] || 0;
                 p.score += pts;
                 const playerTurns = modeData.turns.filter(t => t.pId === p.id);
                 const turnDetails = playerTurns.map(t => {
                     const icon = t.tapTiming === 'EARLY' ? '⚡' : (t.tapTiming === 'LATE' ? '🐢' : '✓');
-                    return `${icon} ${fmt(t.diff)}s off`;
-                }).join(', ');
+                    const offSec = (t.diff / 1000).toFixed(2);
+                    const passedSec = (Math.abs(t.passed) / 1000).toFixed(2);
+                    const passedSign = t.passed >= 0 ? '+' : '−';
+                    const passedLabel = Math.abs(t.passed) < 30 ? 'clean handoff' : `passed ${passedSign}${passedSec}s`;
+                    return `${icon} ${offSec}s off (${passedLabel})`;
+                }).join('<br>');
                 html += `
                     <div class="res-card">
                         <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
                         <div class="res-val">${pts}</div>
-                        <div class="res-note">${playerTurns.length} turn${playerTurns.length === 1 ? '' : 's'}${turnDetails ? ' — ' + turnDetails : ''}</div>
+                        <div class="res-note" style="font-size:0.75rem;line-height:1.4">${turnDetails || 'No turns'}</div>
                         <div class="res-pts">+${pts}</div>
                     </div>`;
             });
