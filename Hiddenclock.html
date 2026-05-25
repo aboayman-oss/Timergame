@@ -237,7 +237,7 @@
             .arena-timer-zone {
                 position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
                 z-index: 60; pointer-events: none;
-                width: min(46vw, 560px); min-height: min(68dvh, 560px); max-height: calc(100dvh - 28px);
+                width: min(46vw, 560px); min-width: 300px; min-height: min(68dvh, 560px); max-height: calc(100dvh - 28px);
                 height: auto; padding: 24px;
                 padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
                 padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
@@ -245,7 +245,7 @@
                 background: linear-gradient(180deg, rgba(13,17,23,0.94), rgba(20,27,39,0.88));
                 border: 1px solid var(--border);
                 box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-                overflow-y: auto;
+                overflow-y: auto; -webkit-overflow-scrolling: touch;
             }
             .arena-timer-zone * { pointer-events: auto; }
             .arena-timer-zone > * { width: min(100%, 480px); }
@@ -253,6 +253,7 @@
             .arena-players-zone {
                 position: absolute; inset: 0;
                 padding: 12px;
+                /* Reserve center space for the larger landscape timer panel */
                 gap: 22px clamp(220px, 34vw, 420px);
             }
             .arena-players-zone.players-2 {
@@ -348,15 +349,17 @@
         .score-pts { font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 900; }
 
         .round-progress {
-            width: 100%; max-width: 500px; display: none; justify-content: center; gap: 8px;
+            width: 100%; max-width: 500px; display: none; justify-content: center; gap: 6px;
             margin-bottom: 12px; min-height: 10px;
         }
         .round-pip {
-            width: 12px; height: 12px; border-radius: 999px; border: 1px solid var(--border);
-            background: var(--surface2); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+            width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border);
+            background: var(--surface2); color: var(--text-dim); font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem; font-weight: 900;
+            display: flex; align-items: center; justify-content: center;
             transition: all 0.2s;
         }
-        .round-pip.done { background: var(--p1); border-color: var(--p1); box-shadow: 0 0 12px var(--p1-dim); }
+        .round-pip.done { border-color: var(--p1); background: var(--p1-dim); color: var(--p1); box-shadow: 0 0 15px var(--p1-dim); }
 
         .game-container {
             width: 100%; max-width: 500px;
@@ -415,7 +418,8 @@
         .stopwatch-display {
             font-family: 'Orbitron', sans-serif; font-size: clamp(3rem, 12vw, 4.5rem); font-weight: 900;
             letter-spacing: 2px; text-align: center; margin: 6px 0 18px; color: var(--text);
-            text-shadow: 0 0 20px rgba(232,240,254,0.1); line-height: 1; transition: all 0.2s;
+            text-shadow: 0 0 20px rgba(232,240,254,0.1); line-height: 1;
+            transition: color 0.2s, text-shadow 0.2s, opacity 0.4s, filter 0.4s;
             min-height: 74px; display: flex; align-items: center; justify-content: center;
             white-space: nowrap; position: relative; overflow: visible;
         }
@@ -423,7 +427,7 @@
         .stopwatch-display.hidden-timer {
             opacity: 0.28; color: rgba(232,240,254,0.92); filter: blur(7px) saturate(1.12);
             text-shadow: 0 0 18px rgba(0,212,255,0.18), 0 0 38px rgba(167,139,250,0.14);
-            letter-spacing: 0.22em;
+            letter-spacing: 0.22em; user-select: none; pointer-events: none;
         }
         .stopwatch-display.hidden-timer::after {
             content: ''; position: absolute; inset: -10px;
@@ -482,6 +486,7 @@
             display: none; width: 100%; max-width: 320px; margin: 10px auto 0;
             background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
             padding: 10px; user-select: none; -webkit-user-select: none;
+            overflow: visible; z-index: 70;
         }
         .game-numpad.show { display: block; }
         .numpad-grid {
@@ -1040,6 +1045,29 @@
     const guessInput = el('guess-input');
     const gameNumpad = el('game-numpad');
 
+    /* ===== HIDDEN TIMER HELPERS ===== */
+    function setHiddenTimer(text = '??.???') {
+        display.className = 'stopwatch-display hidden-timer';
+        display.textContent = text;
+        el('heartbeat-indicator').style.display = 'none';
+        el('heartbeat-indicator').classList.remove('heartbeat-pulse');
+        el('arena-container').classList.add('pulse-glow');
+    }
+
+    function stopHiddenHeartbeat() {
+        if (modeData.heartbeatOsc) { try { modeData.heartbeatOsc.stop(); } catch(e) {} }
+        if (modeData.heartbeatLfo) { try { modeData.heartbeatLfo.stop(); } catch(e) {} }
+        modeData.heartbeatOsc = null;
+        modeData.heartbeatLfo = null;
+        modeData.heartbeatAc = null;
+    }
+
+    function clearHiddenTimer() {
+        stopHiddenHeartbeat();
+        display.className = 'stopwatch-display';
+        el('arena-container').classList.remove('pulse-glow');
+    }
+
     /* ===== CUSTOM NUMPAD LOGIC ===== */
     let numpadTarget = null; // the input element the numpad is currently targeting
 
@@ -1111,19 +1139,6 @@
             rafHandle = requestAnimationFrame(tick);
         };
         tick();
-    }
-
-    function setHiddenTimer(text = '??.???') {
-        display.className = 'stopwatch-display hidden-timer';
-        display.textContent = text;
-        el('heartbeat-indicator').style.display = 'none';
-        el('heartbeat-indicator').classList.remove('heartbeat-pulse');
-        el('arena-container').classList.add('pulse-glow');
-    }
-
-    function clearHiddenTimer() {
-        display.className = 'stopwatch-display';
-        el('arena-container').classList.remove('pulse-glow');
     }
 
     function randomTargetMs(minId, maxId, defaults) {
@@ -1527,7 +1542,7 @@
 
     function renderProgress() {
         const done = Math.min(Math.max(currentRound - 1, 0), totalRounds);
-        el('round-progress').innerHTML = Array.from({ length: totalRounds }, (_, i) => `<div class="round-pip${i < done ? ' done' : ''}"></div>`).join('');
+        el('round-progress').innerHTML = Array.from({ length: totalRounds }, (_, i) => `<div class="round-pip${i < done ? ' done' : ''}">${i + 1}</div>`).join('');
     }
 
     function toggleAdvanced(toggleEl) {
@@ -1649,10 +1664,8 @@
         statusText.textContent = `Round ${currentRound} / ${totalRounds}`;
         setMainButton('NEXT ROUND');
         el('restart-link').classList.remove('show');
-        el('arena-container').classList.remove('pulse-glow');
+        clearHiddenTimer();
         el('arena-container').style.background = '';
-        el('heartbeat-indicator').style.display = 'none';
-        el('heartbeat-indicator').classList.remove('heartbeat-pulse');
         const echoTrack = el('echo-bar-track');
         if (echoTrack) echoTrack.remove();
         const replayBtn = el('echo-replay-btn');
@@ -1811,6 +1824,24 @@
             modeData.stopped = false;
             showToast('Clock is running... invisibly!');
             snd('go');
+            modeData.heartbeatAc = null;
+            try {
+                const ac = getAudioCtx();
+                modeData.heartbeatAc = ac;
+                const osc = ac.createOscillator();
+                const gain = ac.createGain();
+                osc.connect(gain); gain.connect(ac.destination);
+                osc.type = 'sine'; osc.frequency.value = 1.5;
+                gain.gain.value = 0.04;
+                const lfo = ac.createOscillator();
+                const lfoGain = ac.createGain();
+                lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+                lfo.frequency.value = 0.3 + Math.random() * 0.5;
+                lfoGain.gain.value = 0.8;
+                lfo.start(); osc.start();
+                modeData.heartbeatOsc = osc;
+                modeData.heartbeatLfo = lfo;
+            } catch(e) {}
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
                 if (elapsed >= modeData.target && !modeData.stopped) {
@@ -1823,7 +1854,7 @@
                     gs = STATE.RUNNING;
                     modeData.guesses = {};
                     modeData.lockedCount = 0;
-                    display.className = 'stopwatch-display';
+                    clearHiddenTimer();
                     display.textContent = 'TIME\'S UP';
                     showToast('Type your guess and press Lock!', 'var(--success)');
                     // Build manual input UI for each player
@@ -1848,6 +1879,16 @@
                     // Show numpad targeting the first player's input
                     const firstP = realActivePlayers()[0];
                     if (firstP) numpadShow(el(`guess-input-p${firstP.id}`));
+                    // Auto-lock timeout: prevent infinite hang if a player never locks
+                    modeData.guessTimeout = addTimeout(() => {
+                        realActivePlayers().forEach(p => {
+                            if (!modeData.guesses[p.id]) {
+                                const inp = el(`guess-input-p${p.id}`);
+                                if (inp && !inp.value) inp.value = '0';
+                                lockManualGuess(p.id);
+                            }
+                        });
+                    }, 60000);
                     updateKbHint();
                     return false;
                 }
@@ -1862,6 +1903,24 @@
             modeData.stopped = false;
             showToast('Clock is running... invisibly!');
             snd('go');
+            modeData.heartbeatAc = null;
+            try {
+                const ac = getAudioCtx();
+                modeData.heartbeatAc = ac;
+                const osc = ac.createOscillator();
+                const gain = ac.createGain();
+                osc.connect(gain); gain.connect(ac.destination);
+                osc.type = 'sine'; osc.frequency.value = 1.5;
+                gain.gain.value = 0.04;
+                const lfo = ac.createOscillator();
+                const lfoGain = ac.createGain();
+                lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+                lfo.frequency.value = 0.3 + Math.random() * 0.5;
+                lfoGain.gain.value = 0.8;
+                lfo.start(); osc.start();
+                modeData.heartbeatOsc = osc;
+                modeData.heartbeatLfo = lfo;
+            } catch(e) {}
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
                 if (elapsed >= modeData.target && !modeData.stopped) {
@@ -1875,10 +1934,17 @@
                     modeData.guesses = {};
                     modeData.lockedCount = 0;
                     modeData.guessStart = performance.now();
+                    clearHiddenTimer();
                     display.className = 'stopwatch-display running';
                     showToast('TAP when the counter matches!', 'var(--success)');
                     renderArena(ids);
                     updateKbHint();
+                    // Auto-end timeout: prevent infinite hang
+                    addTimeout(() => {
+                        if (modeData.lockedCount < realActivePlayers().length) {
+                            addTimeout(endRound, 100);
+                        }
+                    }, 60000);
                     liveDisplay(() => {
                         if (modeData.lockedCount >= realActivePlayers().length) return false;
                         const guessElapsed = performance.now() - modeData.guessStart;
@@ -2034,6 +2100,20 @@
                     }
                 }
 
+                // Spontaneous explosion chance: scales from 0% to 30% per second over 4s of extra hold
+                if (modeData.holdUnlocked && extraHold > 0) {
+                    const maxExtraMs = 4000;
+                    const explosionChanceMax = 0.30;
+                    const progress = Math.min(extraHold / maxExtraMs, 1.0);
+                    const explosionRate = explosionChanceMax * progress;
+                    const frameProbability = explosionRate * (16.67 / 1000);
+                    if (Math.random() < frameProbability) {
+                        gc.style.background = '';
+                        bombExplode();
+                        return false;
+                    }
+                }
+
                 // Option 3: Sensory Overload — punish greedy holding past minHold
                 if (extraHold > 0 && modeData.holdUnlocked) {
                     // Full red + continuous max haptics to blind the player
@@ -2121,7 +2201,8 @@
                     }
                     setHiddenTimer();
                 } else {
-                    display.classList.remove('hidden-timer');
+                    display.className = 'stopwatch-display running';
+                    el('arena-container').classList.remove('pulse-glow');
                     display.textContent = fmt(remaining);
                 }
             });
@@ -2255,7 +2336,14 @@
         modeData.hits[pId] = elapsed;
         const btn = el(`btn-p${pId}`);
         btn.disabled = true; btn.classList.add('done');
-        el(`stat-p${pId}`).textContent = 'LOCKED';
+
+        // Early/Late feedback (safe: only shown on your own button)
+        const diff = elapsed - modeData.target;
+        const timing = diff < -50 ? 'EARLY' : (diff > 50 ? 'LATE' : 'PERFECT');
+        const timingColor = timing === 'EARLY' ? 'var(--warn)' : (timing === 'LATE' ? 'var(--danger)' : 'var(--success)');
+        el(`stat-p${pId}`).textContent = timing;
+        el(`stat-p${pId}`).style.color = timingColor;
+
         modeData.done += 1;
         if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
     }
@@ -2282,7 +2370,20 @@
         const btn = el(`btn-p${pId}`);
         btn.disabled = true; btn.classList.add('done');
         modeData.done += 1;
-        el(`stat-p${pId}`).textContent = 'LOCKED';
+
+        // Early/Late feedback (Cliff: going over = BUST)
+        const diff = elapsed - modeData.target;
+        if (diff > 0) {
+            el(`stat-p${pId}`).textContent = 'BUST!';
+            el(`stat-p${pId}`).style.color = 'var(--danger)';
+            btn.classList.add('bust-flash');
+        } else {
+            const timing = diff < -(modeData.target * 0.1) ? 'EARLY' : 'CLOSE!';
+            const timingColor = timing === 'EARLY' ? 'var(--warn)' : 'var(--success)';
+            el(`stat-p${pId}`).textContent = timing;
+            el(`stat-p${pId}`).style.color = timingColor;
+        }
+
         if (modeData.done >= realActivePlayers().length) {
             const hasBust = realActivePlayers().some(p => modeData.hits[p.id] > modeData.target);
             if (hasBust) {
@@ -2534,10 +2635,10 @@
         const btn = el(`btn-p${loserId}`);
         if (btn) btn.classList.add('eliminated');
 
-        // Balanced scoring:
-        // - Survivors share a pool proportional to their passes (contribution-based)
-        // - Risk bonus uses diminishing returns (sqrt scaling) to prevent greed exploits
-        // - Minimum participation bonus for survivors who touched the bomb at least once
+        // Participation-weighted scoring:
+        // - Passing and touching the bomb both contribute to score
+        // - Survivors who never got involved still receive a modest fairness floor
+        // - Risk bonus scales with committed hold time
         const totalPasses = realActivePlayers().reduce((sum, p) => sum + (modeData.passCounts[p.id] || 0), 0);
         const totalTouches = realActivePlayers().reduce((sum, p) => sum + (modeData.touchCounts[p.id] || 0), 0);
 
@@ -2626,8 +2727,7 @@
     function showEndScreen(html) {
         clearTimers();
         gs = STATE.RESULT;
-        display.classList.remove('hidden-timer');
-        el('arena-container').classList.remove('pulse-glow');
+        clearHiddenTimer();
         arena.classList.add('hidden');
         arena.innerHTML = '';
         snd('good');
@@ -2686,10 +2786,9 @@
 
         if (currentMode === 2 || currentMode === 5 || currentMode === 7) {
             const target = modeData.target;
-            display.className = 'stopwatch-display';
+            clearHiddenTimer();
             display.textContent = fmt(target);
             display.style.color = '';
-            el('arena-container').classList.remove('pulse-glow');
             const titleMap = {
                 2: 'Target',
                 5: 'Target',
