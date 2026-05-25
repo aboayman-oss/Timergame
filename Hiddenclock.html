@@ -757,6 +757,37 @@
             border-radius: 0 0 var(--radius) var(--radius);
             width: 0%; pointer-events: none;
         }
+        /* Overheat Gauge */
+        .overheat-gauge {
+            position: absolute; bottom: 0; left: 0; right: 0; height: 8px;
+            background: var(--surface); border-radius: 0 0 var(--radius) var(--radius);
+            overflow: hidden; pointer-events: none;
+        }
+        .overheat-fill {
+            height: 100%; width: 0%; border-radius: 0 0 var(--radius) var(--radius);
+            transition: width 0.1s linear, background 0.3s;
+        }
+        .overheat-fill.zone-green { background: linear-gradient(90deg, #00ff87, #4ade80); }
+        .overheat-fill.zone-yellow { background: linear-gradient(90deg, #ffbe00, #f59e0b); }
+        .overheat-fill.zone-red { background: linear-gradient(90deg, #ff3366, #ef4444); animation: overheatPulse 0.4s ease-in-out infinite alternate; }
+        @keyframes overheatPulse { 0% { opacity: 0.8; } 100% { opacity: 1; } }
+        /* Clean (Pacifist) aura */
+        .bomb-clean { box-shadow: 0 0 12px rgba(0,255,135,0.5), 0 0 0 3px rgba(0,255,135,0.25) !important; border-color: var(--success) !important; }
+        .bomb-clean .pb-sub::after { content: ' ✨'; }
+        /* Bomb mode disabled in lobby for 1 player */
+        .lobby-mode-card.mode-disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
+        .lobby-mode-card.mode-disabled::after {
+            content: '2+ Players'; position: absolute; bottom: 4px; left: 50%;
+            transform: translateX(-50%); font-size: 0.55rem; color: var(--danger);
+            font-weight: 700; white-space: nowrap;
+        }
+        /* Visual glitch distraction */
+        @keyframes bombGlitch {
+            0% { filter: saturate(0) contrast(1.5); }
+            50% { filter: saturate(0.3) contrast(1.2); }
+            100% { filter: none; }
+        }
+        .bomb-glitch { animation: bombGlitch 0.5s ease-out forwards; }
         @keyframes bombBlast {
             0%   { background: rgba(0,0,0,0); }
             10%  { background: rgba(255,255,200,0.9); }
@@ -1011,7 +1042,7 @@
         },
         4: {
             n: 'Bomb', short: 'Bomb',
-            desc: 'Hot potato! The bomb has a hidden fuse — hold it for the minimum time, then pass before it blows. Hold longer for bonus points, but get caught holding and you lose!',
+            desc: 'Hot potato with a visible Overheat Gauge! Hold the bomb past minimum time, ride the risk zones for bonus points, but get caught in the Red Zone and you explode. Stay untouched for the Pacifist Jackpot!',
             config: `
                 <div class="difficulty-presets">
                     <button class="preset-btn active" data-preset="easy" onclick="applyPreset(4, 'easy')">Easy</button>
@@ -1027,7 +1058,7 @@
                         <label>Risk Bonus</label>
                         <div class="config-toggle"><span>Bonus for holding longer</span><label class="toggle"><input type="checkbox" id="m4-risk" checked><span class="toggle-track"></span></label></div>
                     </div>
-                    <div class="config-note">Fuse scales dynamically with player count. Surges fake you out — Sensory Overload punishes greed!</div>
+                    <div class="config-note">Global Fuse scales by player count. Overheat Gauge shows your risk visually. Untouched players earn the Pacifist Jackpot (+150)!</div>
                 </div>`
         },
         5: {
@@ -1126,9 +1157,9 @@
             hard:   { 'm3-min': 2.0, 'm3-max': 3.5, 'm3-laps': 4 }
         },
         4: {
-            easy:   { baseBuffer: 3.5, varMin: 1.5, varMax: 4.0, surgeCount: 2, surgeIntensity: 0.4,  minHoldMs: 2000, fuseCap: null },
-            medium: { baseBuffer: 2.5, varMin: 1.0, varMax: 3.0, surgeCount: 2, surgeIntensity: 0.85, minHoldMs: 1500, fuseCap: null },
-            hard:   { baseBuffer: 1.5, varMin: 0.5, varMax: 1.5, surgeCount: 3, surgeIntensity: 0.98, minHoldMs:  800, fuseCap: 14000 }
+            easy:   { fusePerPlayer: 5.0, minHoldMs: 2000, holdVariance: 0.10, surgeCount: 0, greenZoneMs: 2000, yellowZoneMs: 2000, redExplosionRate: 0.20 },
+            medium: { fusePerPlayer: 4.0, minHoldMs: 1500, holdVariance: 0.15, surgeCount: 1, greenZoneMs: 1500, yellowZoneMs: 1500, redExplosionRate: 0.30 },
+            hard:   { fusePerPlayer: 3.0, minHoldMs:  800, holdVariance: 0.20, surgeCount: 2, greenZoneMs: 1000, yellowZoneMs: 1200, redExplosionRate: 0.45 }
         },
         5: {
             easy:   { 'm5-min': 4,  'm5-max': 7  },
@@ -1615,6 +1646,7 @@
             )).join('');
         }
         updateLobbyStartBtn();
+        updateBombModeAvailability();
     }
 
     function updateLobbyStartBtn() {
@@ -1622,6 +1654,20 @@
         const btn = el('lobby-start-btn');
         const diffLabel = currentDifficulty.charAt(0).toUpperCase() + currentDifficulty.slice(1);
         if (btn) btn.innerHTML = `▶ START<span class="lobby-start-sub">${MODE_EMOJIS[currentMode] || ''} ${safe(mode.short)} · ${playerCount}P · ${totalRounds}R · ${diffLabel}</span>`;
+    }
+
+    function updateBombModeAvailability() {
+        const bombCard = document.querySelector('.lobby-mode-card[data-mode-id="4"]');
+        if (!bombCard) return;
+        if (playerCount < 2) {
+            bombCard.classList.add('mode-disabled');
+            // If bomb mode was selected, switch to mode 1
+            if (currentMode === 4) {
+                selectLobbyMode(1);
+            }
+        } else {
+            bombCard.classList.remove('mode-disabled');
+        }
     }
 
     function setLobbyDifficulty(preset) {
@@ -1653,6 +1699,7 @@
         el('s-pcount').value = String(playerCount);
         buildSettings();
         savePrefs();
+        updateBombModeAvailability();
         updateLobbyStartBtn();
     }
 
@@ -2310,12 +2357,8 @@
             const presetKey = activeBtn?.dataset?.preset || 'easy';
             const preset = MODE_PRESETS[4][presetKey];
 
-            // Dynamic fuse calculation scaled by player count
-            const fuseBase = playerCount * preset.baseBuffer * 1000;
-            const fuseVar = rand(playerCount * preset.varMin * 1000, playerCount * preset.varMax * 1000);
-            modeData.fuse = fuseBase + fuseVar;
-            // Cap fuse for Hard to prevent accidental generosity with many players
-            if (preset.fuseCap) modeData.fuse = Math.min(modeData.fuse, preset.fuseCap);
+            // Global Fuse: guaranteed timer = fusePerPlayer × playerCount
+            modeData.fuse = preset.fusePerPlayer * playerCount * 1000;
 
             modeData.alive = ids.slice();
             modeData.holderIdx = Math.floor(Math.random() * modeData.alive.length);
@@ -2324,36 +2367,28 @@
             modeData.holdTotals = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.passesReceived = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.locked = null;
-            // Min hold scales with difficulty via preset
-            modeData.minHold = preset.minHoldMs;
+            // Min hold scales with difficulty via preset, with reduced variance
             modeData.baseMinHold = preset.minHoldMs;
+            modeData.minHold = preset.minHoldMs;
+            modeData.holdVariance = preset.holdVariance;
             modeData.riskBonus = el('m4-risk')?.checked !== false;
             modeData.holdStart = performance.now();
             modeData.riskTime = Object.fromEntries(ids.map(id => [id, 0]));
+            modeData.overheatZone = Object.fromEntries(ids.map(id => [id, 'none']));
             modeData.holdUnlocked = false;
             modeData.lastPasser = null;
             modeData.lastReceiver = null;
-            modeData.lastRiskTick = performance.now();
-            modeData.spontaneousChance = 0;
             modeData.explosionCause = 'FUSE';
-
-            // Generate Surge events (fake warnings) — random time windows during the fuse
-            const surges = [];
-            const surgeDuration = 1200; // ms per surge event
-            for (let i = 0; i < preset.surgeCount; i++) {
-                // Place surges in the middle 70% of the fuse (10%-80% range), avoiding overlap
-                const earliest = modeData.fuse * 0.10;
-                const latest = modeData.fuse * 0.80 - surgeDuration;
-                let surgeStart;
-                let attempts = 0;
-                do {
-                    surgeStart = rand(earliest, latest);
-                    attempts++;
-                } while (attempts < 50 && surges.some(s => Math.abs(s.start - surgeStart) < surgeDuration * 2));
-                surges.push({ start: surgeStart, duration: surgeDuration, peak: preset.surgeIntensity });
-            }
-            modeData.surges = surges;
-            modeData.surgeIntensity = preset.surgeIntensity;
+            // Overheat zone durations
+            modeData.greenZoneMs = preset.greenZoneMs;
+            modeData.yellowZoneMs = preset.yellowZoneMs;
+            modeData.redExplosionRate = preset.redExplosionRate;
+            // Predictable distraction surges at 50% and 75% of Global Fuse
+            modeData.surgeCount = preset.surgeCount;
+            modeData.surgeTriggers = [];
+            if (preset.surgeCount >= 1) modeData.surgeTriggers.push(0.50);
+            if (preset.surgeCount >= 2) modeData.surgeTriggers.push(0.75);
+            modeData.surgesFired = [];
 
             display.className = 'stopwatch-display danger';
             display.textContent = 'BOMB';
@@ -2365,8 +2400,8 @@
                 const elapsed = performance.now() - startTime;
                 const now = performance.now();
                 const holdElapsed = now - modeData.holdStart;
-                const holdDuration = holdElapsed;
                 const holdRemaining = Math.max(0, modeData.minHold - holdElapsed);
+                const holderId = modeData.alive[modeData.holderIdx];
 
                 if (now < (modeData.passFlashUntil || 0)) {
                     display.textContent = '\u{1F525} PASS!';
@@ -2376,8 +2411,7 @@
                     display.textContent = '\u{1F4A3} PASS!';
                 }
 
-                // Update hold progress bar
-                const holderId = modeData.alive[modeData.holderIdx];
+                // Update hold progress bar during lockout
                 const bar = el(`hold-bar-p${holderId}`);
                 if (bar && holdRemaining > 0) {
                     bar.style.width = `${clamp((holdElapsed / modeData.minHold) * 100, 0, 100)}%`;
@@ -2389,82 +2423,77 @@
                 }
 
                 const gc = el('arena-container');
-                const extraHold = Math.max(0, holdDuration - modeData.minHold);
-                modeData.spontaneousChance = clamp((extraHold / 3500) * 0.30, 0, 0.30);
-                const dt = now - (modeData.lastRiskTick || now);
-                modeData.lastRiskTick = now;
-                const holderSub = el(`sub-p${holderId}`);
-                if (modeData.holdUnlocked && holderSub && now >= (modeData.passFlashUntil || 0)) {
-                    holderSub.textContent = modeData.spontaneousChance >= 0.2 ? 'CRITICAL RISK' : (modeData.spontaneousChance >= 0.1 ? 'RISK RISING' : 'PASS NOW!');
-                }
+
+                // === OVERHEAT GAUGE SYSTEM ===
                 if (modeData.holdUnlocked) {
-                    const frameChance = 1 - Math.pow(1 - modeData.spontaneousChance, dt / 1000);
-                    if (Math.random() < frameChance) {
-                        gc.style.background = '';
-                        modeData.explosionCause = 'SPONTANEOUS';
-                        bombExplode();
-                        return false;
-                    }
-                }
+                    const extraHold = Math.max(0, holdElapsed - modeData.minHold);
+                    const greenEnd = modeData.greenZoneMs;
+                    const yellowEnd = greenEnd + modeData.yellowZoneMs;
+                    const totalGaugeMs = yellowEnd + 2000; // Red zone extends 2s beyond yellow
 
-                // Spontaneous explosion chance: scales from 0% to 30% per second over 4s of extra hold
-                if (modeData.holdUnlocked && extraHold > 0) {
-                    const maxExtraMs = 4000;
-                    const explosionChanceMax = 0.30;
-                    const progress = Math.min(extraHold / maxExtraMs, 1.0);
-                    const explosionRate = explosionChanceMax * progress;
-                    const frameProbability = explosionRate * (16.67 / 1000);
-                    if (Math.random() < frameProbability) {
-                        gc.style.background = '';
-                        bombExplode();
-                        return false;
-                    }
-                }
+                    // Determine current zone
+                    let zone = 'green';
+                    if (extraHold > yellowEnd) zone = 'red';
+                    else if (extraHold > greenEnd) zone = 'yellow';
+                    modeData.overheatZone[holderId] = zone;
 
-                // Option 3: Sensory Overload — punish greedy holding past minHold
-                if (extraHold > 0 && modeData.holdUnlocked) {
-                    // Full red + continuous max haptics to blind the player
-                    gc.style.background = `rgba(255, 10, 10, 0.98)`;
-                    if (Math.random() < 0.3) {
-                        hap([30]);
+                    // Update overheat gauge visual
+                    const gauge = el(`overheat-fill-p${holderId}`);
+                    if (gauge) {
+                        const pct = clamp((extraHold / totalGaugeMs) * 100, 0, 100);
+                        gauge.style.width = `${pct}%`;
+                        gauge.className = `overheat-fill zone-${zone}`;
                     }
-                } else {
-                    // Surge System: fake warnings to deceive players
-                    let surgeLevel = 0;
-                    for (const surge of modeData.surges) {
-                        const surgeElapsed = elapsed - surge.start;
-                        if (surgeElapsed >= 0 && surgeElapsed <= surge.duration) {
-                            // Ramp up first half, ramp down second half
-                            const half = surge.duration / 2;
-                            const progress = surgeElapsed <= half
-                                ? surgeElapsed / half
-                                : 1 - (surgeElapsed - half) / half;
-                            surgeLevel = Math.max(surgeLevel, progress * surge.peak);
+
+                    // Update sub-text with zone info
+                    const holderSub = el(`sub-p${holderId}`);
+                    if (holderSub && now >= (modeData.passFlashUntil || 0)) {
+                        if (zone === 'green') holderSub.textContent = 'SAFE — Pass now';
+                        else if (zone === 'yellow') holderSub.textContent = '\u{26A0}\u{FE0F} RISK BONUS';
+                        else holderSub.textContent = '\u{1F525} CRITICAL — PASS NOW!';
+                    }
+
+                    // Red Zone: active rolling explosion chance
+                    if (zone === 'red') {
+                        gc.style.background = `rgba(255, 30, 30, ${0.15 + clamp((extraHold - yellowEnd) / 2000, 0, 0.4)})`;
+                        const dt = 16.67; // ~60fps frame time
+                        const frameChance = 1 - Math.pow(1 - modeData.redExplosionRate, dt / 1000);
+                        if (Math.random() < frameChance) {
+                            gc.style.background = '';
+                            modeData.explosionCause = 'OVERHEAT';
+                            bombExplode();
+                            return false;
                         }
-                    }
-
-                    // True baseline: gentle ramp based on fuse progress
-                    const pct = elapsed / modeData.fuse;
-                    const trueIntensity = pct * 0.3; // subtle linear ramp
-
-                    // Combined intensity: max of true baseline and surge
-                    const intensity = Math.max(trueIntensity, surgeLevel);
-
-                    if (intensity > 0.02) {
-                        const r = Math.round(180 + 75 * intensity);
-                        const gb = Math.round(30 * (1 - intensity));
-                        gc.style.background = `rgba(${r}, ${gb}, ${gb}, ${0.05 + intensity * 0.2})`;
-                        // Haptic triggers scale with intensity
-                        if (Math.random() < 0.04 * intensity) {
-                            hap([Math.round(15 + 40 * intensity)]);
-                        }
+                        if (Math.random() < 0.15) hap([40]);
+                    } else if (zone === 'yellow') {
+                        gc.style.background = `rgba(255, 190, 0, ${0.05 + clamp((extraHold - greenEnd) / modeData.yellowZoneMs, 0, 0.12)})`;
                     } else {
                         gc.style.background = '';
                     }
+                } else {
+                    gc.style.background = '';
                 }
 
+                // === PREDICTABLE DISTRACTION SURGES ===
+                const fusePct = elapsed / modeData.fuse;
+                for (let i = 0; i < modeData.surgeTriggers.length; i++) {
+                    const trigger = modeData.surgeTriggers[i];
+                    if (fusePct >= trigger && !modeData.surgesFired.includes(i)) {
+                        modeData.surgesFired.push(i);
+                        // Visual glitch
+                        gc.classList.add('bomb-glitch');
+                        setTimeout(() => gc.classList.remove('bomb-glitch'), 500);
+                        // Heartbeat haptic on hard
+                        if (currentDifficulty === 'hard') {
+                            hap([60, 40, 60, 40, 80]);
+                        }
+                    }
+                }
+
+                // === GLOBAL FUSE EXPIRY ===
                 if (elapsed >= modeData.fuse) {
                     gc.style.background = '';
+                    modeData.explosionCause = 'FUSE';
                     bombExplode();
                     return false;
                 }
@@ -2924,20 +2953,20 @@
         const holderId = modeData.alive[modeData.holderIdx];
         modeData.holdStart = performance.now();
         modeData.holdUnlocked = false;
-        modeData.lastRiskTick = modeData.holdStart;
-        modeData.spontaneousChance = 0;
-        // Randomize min hold each turn (+/- 30% of base)
-        const variance = modeData.baseMinHold * 0.3;
+        // Randomize min hold with reduced variance per difficulty preset
+        const variance = modeData.baseMinHold * modeData.holdVariance;
         modeData.minHold = modeData.baseMinHold + (Math.random() * 2 - 1) * variance;
         modeData.touchCounts[holderId] = (modeData.touchCounts[holderId] || 0) + 1;
         modeData.alive.forEach(id => {
             const btn = el(`btn-p${id}`);
             if (!btn) return;
-            btn.classList.remove('active', 'cooldown', 'pulse-active', 'bomb-holder');
+            btn.classList.remove('active', 'cooldown', 'pulse-active', 'bomb-holder', 'bomb-clean');
             btn.style.borderColor = '';
-            // Remove any old hold-bar
+            // Remove any old hold-bar and overheat gauge
             const oldBar = btn.querySelector('.hold-bar');
             if (oldBar) oldBar.remove();
+            const oldGauge = btn.querySelector('.overheat-gauge');
+            if (oldGauge) oldGauge.remove();
             if (id === holderId) {
                 btn.disabled = true;
                 btn.classList.add('active', 'cooldown', 'bomb-holder');
@@ -2950,10 +2979,13 @@
                 btn.appendChild(bar);
             } else {
                 btn.disabled = true;
+                // Show "Clean" aura for untouched players (Pacifist status)
+                const isClean = (modeData.touchCounts[id] || 0) === 0;
+                if (isClean) btn.classList.add('bomb-clean');
                 // Show cooldown indicator if this player can't receive due to rotation rule
                 const isCooledDown = modeData.alive.length >= 3 && modeData.lastReceiver === id && modeData.lastPasser === holderId;
-                el(`stat-p${id}`).textContent = isCooledDown ? '\u{1F6AB} COOLDOWN' : (modeData.passCounts[id] ? `${modeData.passCounts[id]} pass${modeData.passCounts[id] === 1 ? '' : 'es'}` : 'READY');
-                el(`sub-p${id}`).textContent = isCooledDown ? 'Can\u2019t receive' : 'Waiting\u2026';
+                el(`stat-p${id}`).textContent = isCooledDown ? '\u{1F6AB} COOLDOWN' : (isClean ? '\u2728 CLEAN' : (modeData.passCounts[id] ? `${modeData.passCounts[id]} pass${modeData.passCounts[id] === 1 ? '' : 'es'}` : 'READY'));
+                el(`sub-p${id}`).textContent = isCooledDown ? 'Can\u2019t receive' : (isClean ? 'Pacifist Jackpot!' : 'Waiting\u2026');
             }
         });
         modeData.locked = holderId;
@@ -2969,11 +3001,15 @@
             if (id === holderId) {
                 btn.disabled = true;
                 btn.classList.remove('cooldown', 'bomb-holder');
-                // Remove hold bar now that hold is complete
+                // Remove hold bar and add overheat gauge
                 const bar = btn.querySelector('.hold-bar');
-                if (bar) bar.style.width = '100%';
+                if (bar) bar.remove();
+                const gauge = document.createElement('div');
+                gauge.className = 'overheat-gauge';
+                gauge.innerHTML = `<div class="overheat-fill zone-green" id="overheat-fill-p${id}" style="width:0%"></div>`;
+                btn.appendChild(gauge);
                 el(`stat-p${id}`).textContent = '\u{1F4A3} BOMB';
-                el(`sub-p${id}`).textContent = 'PASS NOW!';
+                el(`sub-p${id}`).textContent = 'SAFE — Pass now';
             } else {
                 // Enforce pass rotation: in 3+ player games, block passing back to the person who just passed to you
                 const isCooledDown = modeData.alive.length >= 3 && modeData.lastReceiver === id && modeData.lastPasser === holderId;
@@ -3001,11 +3037,16 @@
         const holdDuration = performance.now() - modeData.holdStart;
         const extraHold = Math.max(0, holdDuration - modeData.minHold);
 
-        // Risk bonus exploit fix: cap the extra hold time that counts for bonus.
-        // Players who hold until the visual warning cannot bank unlimited risk time.
-        // Max creditable extra hold is 3 seconds per turn.
-        const cappedExtra = Math.min(extraHold, 3000);
-        modeData.riskTime[holderId] = (modeData.riskTime[holderId] || 0) + cappedExtra;
+        // Track risk time based on which zones the player passed through
+        const greenEnd = modeData.greenZoneMs;
+        const yellowEnd = greenEnd + modeData.yellowZoneMs;
+        // Yellow zone time contribution
+        const yellowTime = clamp(extraHold - greenEnd, 0, modeData.yellowZoneMs);
+        // Red zone time contribution
+        const redTime = clamp(extraHold - yellowEnd, 0, 3000);
+        // Risk time = yellow contributes partially, red contributes fully
+        const riskContribution = yellowTime * 0.5 + redTime * 1.5;
+        modeData.riskTime[holderId] = (modeData.riskTime[holderId] || 0) + riskContribution;
         modeData.holdTotals[holderId] = (modeData.holdTotals[holderId] || 0) + holdDuration;
 
         modeData.passCounts[holderId] += 1;
@@ -3048,18 +3089,16 @@
         const loser = players.find(p => p.id === loserId);
         modeData.holdTotals[loserId] = (modeData.holdTotals[loserId] || 0) + (performance.now() - modeData.holdStart);
         const btn = el(`btn-p${loserId}`);
-        if (btn) { btn.classList.remove('bomb-holder'); btn.classList.add('eliminated'); }
-        // Remove hold bars from all buttons
-        modeData.alive.forEach(id => { const b = el(`btn-p${id}`); if (b) { const bar = b.querySelector('.hold-bar'); if (bar) bar.remove(); } });
+        if (btn) { btn.classList.remove('bomb-holder', 'bomb-clean'); btn.classList.add('eliminated'); }
+        // Remove hold bars and overheat gauges from all buttons
+        modeData.alive.forEach(id => { const b = el(`btn-p${id}`); if (b) { const bar = b.querySelector('.hold-bar'); if (bar) bar.remove(); const gauge = b.querySelector('.overheat-gauge'); if (gauge) gauge.remove(); } });
 
-        // Participation-weighted scoring:
-        // - Passing and touching the bomb both contribute to score
-        // - Survivors who never got involved still receive a modest fairness floor
-        // - Risk bonus scales with committed hold time
+        // === REWORKED SCORING SYSTEM ===
+        // Exploded: 0 pts | Survivor: 50 pts | Pass Contribution: up to +40
+        // Overheat Bonus: up to +60 | Pacifist Jackpot: +150 (zero touches, survived)
         const totalPasses = realActivePlayers().reduce((sum, p) => sum + (modeData.passCounts[p.id] || 0), 0);
-        const totalTouches = realActivePlayers().reduce((sum, p) => sum + (modeData.touchCounts[p.id] || 0), 0);
 
-        const causeText = modeData.explosionCause === 'SPONTANEOUS' ? ' unexpectedly' : '';
+        const causeText = modeData.explosionCause === 'OVERHEAT' ? ' (Overheat!)' : '';
         let html = `<div style="color:var(--danger);font-size:1.3rem;font-weight:900;margin-bottom:6px;">\u{1F4A5} ${safe(loser.name)} exploded${causeText}!</div><div class="result-grid">`;
         realActivePlayers().forEach(p => {
             const survived = p.id !== loserId;
@@ -3068,19 +3107,45 @@
             const riskMs = modeData.riskTime[p.id] || 0;
             const heldMs = modeData.holdTotals[p.id] || 0;
 
-            let pts = survived ? 90 : 20;
-            pts += Math.round(40 * (passes / Math.max(1, totalPasses)));
-            pts += Math.round(35 * (touches / Math.max(1, totalTouches)));
-            pts += modeData.riskBonus ? Math.round(35 * Math.min(1, riskMs / 2500)) : 0;
-            if (survived && touches === 0) pts += 35;
-            if (!survived) pts = Math.max(0, pts);
+            let pts = 0;
+            let bonuses = [];
+
+            if (!survived) {
+                // Exploded player: 0 points
+                pts = 0;
+                bonuses.push('Exploded');
+            } else {
+                // Survivor base: 50 points
+                pts = 50;
+                bonuses.push('+50 survived');
+
+                // Pass Contribution: up to +40 based on proportion of passes
+                if (totalPasses > 0) {
+                    const passBonus = Math.round(40 * (passes / Math.max(1, totalPasses)));
+                    pts += passBonus;
+                    if (passBonus > 0) bonuses.push(`+${passBonus} passes`);
+                }
+
+                // Overheat Bonus: up to +60 based on risk time accumulated
+                if (modeData.riskBonus && riskMs > 0) {
+                    const overheatBonus = Math.round(60 * Math.min(1, riskMs / 4000));
+                    pts += overheatBonus;
+                    if (overheatBonus > 0) bonuses.push(`+${overheatBonus} overheat`);
+                }
+
+                // Pacifist Jackpot: +150 for untouched survivors
+                if (touches === 0) {
+                    pts += 150;
+                    bonuses.push('+150 PACIFIST \u2728');
+                }
+            }
 
             p.score += pts;
             html += `
                 <div class="res-card">
-                    <div class="res-name" style="color:var(${p.var})">${safe(p.name)}${survived ? '' : ' \u{1F4A5}'}</div>
+                    <div class="res-name" style="color:var(${p.var})">${safe(p.name)}${survived ? '' : ' \u{1F4A5}'}${survived && touches === 0 ? ' \u2728' : ''}</div>
                     <div class="res-val">${passes} pass${passes === 1 ? '' : 'es'} \u2022 ${touches} touch${touches === 1 ? '' : 'es'}</div>
-                    <div class="res-note">Held ${(heldMs / 1000).toFixed(1)}s total${modeData.riskBonus ? ` \u2022 Risk ${(riskMs / 1000).toFixed(1)}s` : ''}${survived && touches === 0 ? ' \u2022 Fair-play bonus' : ''}</div>
+                    <div class="res-note">${bonuses.join(' \u2022 ')}</div>
                     <div class="res-pts ${pts === 0 ? 'zero' : ''}">${pts > 0 ? '+' : ''}${pts}</div>
                 </div>`;
         });
