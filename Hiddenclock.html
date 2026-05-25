@@ -214,7 +214,7 @@
             padding: 10px 14px; flex-shrink: 0;
             /* Reserve space below the fixed HUD scoreboard in portrait mode */
             padding-top: calc(env(safe-area-inset-top, 4px) + 48px);
-            overflow-y: auto; -webkit-overflow-scrolling: touch; max-height: 100vh; max-height: 100dvh;
+            overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; max-height: 100vh; max-height: 100dvh;
         }
         .arena-players-zone {
             flex: 1; display: grid; gap: 6px; padding: 6px;
@@ -245,7 +245,7 @@
                 background: linear-gradient(180deg, rgba(13,17,23,0.94), rgba(20,27,39,0.88));
                 border: 1px solid var(--border);
                 box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-                overflow-y: auto; -webkit-overflow-scrolling: touch;
+                overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
             }
             .arena-timer-zone * { pointer-events: auto; }
             .arena-timer-zone > * { width: min(100%, 480px); }
@@ -741,6 +741,36 @@
         .lobby-mode-card.active {
             background: linear-gradient(135deg, rgba(0,212,255,0.12), rgba(167,139,250,0.1)) !important;
         }
+
+        /* ===== LOBBY DIFFICULTY BUTTONS ===== */
+        .lobby-diff-btn { width: auto; min-width: 70px; padding: 0 16px; border-radius: 12px; font-size: 0.75rem; letter-spacing: 0.04em; }
+
+        /* ===== BOMB MODE STYLES ===== */
+        .bomb-holder { animation: bombHolderPulse 0.75s ease-in-out infinite alternate !important; }
+        @keyframes bombHolderPulse {
+            0%   { box-shadow: 0 0 8px rgba(255,51,102,0.5),  0 0 0 0   rgba(255,51,102,0.3); border-color: var(--danger) !important; }
+            100% { box-shadow: 0 0 28px rgba(255,51,102,0.95), 0 0 0 6px rgba(255,51,102,0); border-color: var(--danger) !important; }
+        }
+        .hold-bar {
+            position: absolute; bottom: 0; left: 0; height: 4px;
+            background: linear-gradient(90deg, var(--danger), var(--warn));
+            border-radius: 0 0 var(--radius) var(--radius);
+            width: 0%; pointer-events: none;
+        }
+        @keyframes bombBlast {
+            0%   { background: rgba(0,0,0,0); }
+            10%  { background: rgba(255,255,200,0.9); }
+            25%  { background: rgba(255,100,0,0.75); }
+            60%  { background: rgba(255,51,102,0.35); }
+            100% { background: rgba(0,0,0,0); }
+        }
+        .bomb-exploding { animation: bombBlast 0.65s ease-out forwards; }
+        @keyframes boomPop {
+            0%   { transform: scale(0.4) rotate(-4deg); opacity: 0.3; }
+            60%  { transform: scale(1.18) rotate(1deg);  opacity: 1; }
+            100% { transform: scale(1)    rotate(0);     opacity: 1; }
+        }
+        .boom-pop { animation: boomPop 0.45s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
     </style>
 </head>
 <body class="state-lobby">
@@ -765,6 +795,10 @@
         <div style="text-align:center;">
             <div class="lobby-player-label">ROUNDS</div>
             <div class="lobby-player-selector" id="lobby-round-selector"></div>
+        </div>
+        <div style="text-align:center;">
+            <div class="lobby-player-label">DIFFICULTY</div>
+            <div class="lobby-player-selector" id="lobby-difficulty-selector"></div>
         </div>
         <button class="lobby-start-btn" id="lobby-start-btn" onclick="handleLobbyStart(event)">▶ START</button>
     </div>
@@ -1141,6 +1175,7 @@
     let totalRounds = 3;
     let currentRound = 1;
     let currentMode = 1;
+    let currentDifficulty = 'easy';
     let gs = STATE.MENU;
     let startTime = 0;
     let modeData = {};
@@ -1256,7 +1291,13 @@
 
     function randomTargetMs(minId, maxId, defaults) {
         const [minS, maxS] = sanitizeRange(minId, maxId, defaults);
-        return rand(minS * 1000, maxS * 1000);
+        return snapToDifficulty(rand(minS * 1000, maxS * 1000));
+    }
+
+    function snapToDifficulty(ms) {
+        if (currentDifficulty === 'easy')   return Math.round(ms / 1000) * 1000;
+        if (currentDifficulty === 'medium') return Math.round(ms / 500)  * 500;
+        return ms; // hard: truly random
     }
 
     function getTimingLabel(actual, target, epsilon = 16) {
@@ -1354,7 +1395,7 @@
                 good: () => { play(660, 0.1); play(880, 0.2, 'sine', 0.2, 0.1); },
                 perf: () => { play(880, 0.1); play(1100, 0.1, 'sine', 0.2, 0.1); play(1320, 0.3, 'sine', 0.2, 0.2); },
                 bad: () => { play(250, 0.1, 'sawtooth', 0.15); play(200, 0.2, 'sawtooth', 0.15, 0.1); },
-                exp: () => play(100, 0.5, 'square', 0.3)
+                exp: () => { play(80, 0.6, 'square', 0.35); play(140, 0.4, 'sawtooth', 0.25, 0.05); play(55, 0.8, 'square', 0.3, 0.1); play(200, 0.2, 'sawtooth', 0.15, 0.3); }
             };
             if (map[type]) map[type]();
         } catch (e) {}
@@ -1419,6 +1460,7 @@
             haptic: el('s-haptic')?.checked ?? true,
             distract: el('s-distract')?.checked ?? false,
             lastMode: currentMode,
+            lastDifficulty: currentDifficulty,
             modeConfigs: modeConfigCache
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -1436,6 +1478,7 @@
             if (typeof prefs.haptic === 'boolean') el('s-haptic').checked = prefs.haptic;
             if (typeof prefs.distract === 'boolean') el('s-distract').checked = prefs.distract;
             if (prefs.lastMode && MODES[prefs.lastMode]) currentMode = Number(prefs.lastMode);
+            if (['easy','medium','hard'].includes(prefs.lastDifficulty)) currentDifficulty = prefs.lastDifficulty;
             if (prefs.modeConfigs && typeof prefs.modeConfigs === 'object') modeConfigCache = prefs.modeConfigs;
         } catch (e) {}
     }
@@ -1546,13 +1589,25 @@
         roundSelector.innerHTML = ROUND_OPTIONS.map(n => (
             `<button class="lobby-player-btn${n === totalRounds ? ' active' : ''}" onclick="setLobbyRounds(${n})">${n}</button>`
         )).join('');
+        const diffSelector = el('lobby-difficulty-selector');
+        if (diffSelector) {
+            diffSelector.innerHTML = ['easy', 'medium', 'hard'].map(d => (
+                `<button class="lobby-player-btn lobby-diff-btn${d === currentDifficulty ? ' active' : ''}" data-diff="${d}" onclick="setLobbyDifficulty('${d}')">${d.charAt(0).toUpperCase() + d.slice(1)}</button>`
+            )).join('');
+        }
         updateLobbyStartBtn();
     }
 
     function updateLobbyStartBtn() {
         const mode = MODES[currentMode];
         const btn = el('lobby-start-btn');
-        if (btn) btn.innerHTML = `▶ START<span class="lobby-start-sub">${MODE_EMOJIS[currentMode] || ''} ${safe(mode.short)} · ${playerCount}P · ${totalRounds}R</span>`;
+        const diffLabel = currentDifficulty.charAt(0).toUpperCase() + currentDifficulty.slice(1);
+        if (btn) btn.innerHTML = `▶ START<span class="lobby-start-sub">${MODE_EMOJIS[currentMode] || ''} ${safe(mode.short)} · ${playerCount}P · ${totalRounds}R · ${diffLabel}</span>`;
+    }
+
+    function setLobbyDifficulty(preset) {
+        applyPreset(currentMode, preset);
+        updateLobbyStartBtn();
     }
 
     function selectLobbyMode(m) {
@@ -1713,6 +1768,10 @@
         el('config-area').querySelectorAll('.preset-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.preset === preset);
         });
+        currentDifficulty = preset;
+        document.querySelectorAll('#lobby-difficulty-selector .lobby-player-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.diff === preset);
+        });
         cacheCurrentModeConfig();
         savePrefs();
     }
@@ -1725,8 +1784,11 @@
                 <p>${safe(mode.desc)}</p>
             </div>
             ${mode.config}`;
-        applyPreset(currentMode, 'easy');
+        applyPreset(currentMode, currentDifficulty);
         restoreConfig(modeConfigCache[currentMode] || {});
+        // Sync currentDifficulty from whatever preset button is now active (restoreConfig may have changed values)
+        const restoredBtn = el('config-area')?.querySelector('.preset-btn.active');
+        if (restoredBtn) currentDifficulty = restoredBtn.dataset.preset || currentDifficulty;
         cacheCurrentModeConfig();
         el('config-area').querySelectorAll('input, select').forEach(node => {
             const handler = () => {
@@ -1981,7 +2043,7 @@
         if (currentMode === 1) {
             setHiddenTimer();
             const [minS, maxS] = sanitizeRange('m1-min', 'm1-max', { min: 3, max: 8 });
-            modeData.target = rand(minS * 1000, maxS * 1000);
+            modeData.target = snapToDifficulty(rand(minS * 1000, maxS * 1000));
             modeData.stopped = false;
             showToast('Clock is running... invisibly!');
             snd('go');
@@ -2060,7 +2122,7 @@
         if (currentMode === 6) {
             setHiddenTimer();
             const [minS, maxS] = sanitizeRange('m6-min', 'm6-max', { min: 3, max: 8 });
-            modeData.target = rand(minS * 1000, maxS * 1000);
+            modeData.target = snapToDifficulty(rand(minS * 1000, maxS * 1000));
             modeData.stopped = false;
             showToast('Clock is running... invisibly!');
             snd('go');
@@ -2231,9 +2293,16 @@
                 if (now < (modeData.passFlashUntil || 0)) {
                     display.textContent = '\u{1F525} PASS!';
                 } else if (holdRemaining > 0) {
-                    display.textContent = `HOLD ${(holdRemaining / 1000).toFixed(1)}s`;
+                    display.textContent = `\u{1F4A3} ${(holdRemaining / 1000).toFixed(1)}s`;
                 } else {
                     display.textContent = '\u{1F4A3} PASS!';
+                }
+
+                // Update hold progress bar
+                const holderId = modeData.alive[modeData.holderIdx];
+                const bar = el(`hold-bar-p${holderId}`);
+                if (bar && holdRemaining > 0) {
+                    bar.style.width = `${clamp((holdElapsed / modeData.minHold) * 100, 0, 100)}%`;
                 }
 
                 if (holdRemaining <= 0 && !modeData.holdUnlocked) {
@@ -2246,7 +2315,6 @@
                 modeData.spontaneousChance = clamp((extraHold / 3500) * 0.30, 0, 0.30);
                 const dt = now - (modeData.lastRiskTick || now);
                 modeData.lastRiskTick = now;
-                const holderId = modeData.alive[modeData.holderIdx];
                 const holderSub = el(`sub-p${holderId}`);
                 if (modeData.holdUnlocked && holderSub && now >= (modeData.passFlashUntil || 0)) {
                     holderSub.textContent = modeData.spontaneousChance >= 0.2 ? 'CRITICAL RISK' : (modeData.spontaneousChance >= 0.1 ? 'RISK RISING' : 'PASS NOW!');
@@ -2340,7 +2408,7 @@
 
         if (currentMode === 7) {
             const [minS, maxS] = sanitizeRange('m7-min', 'm7-max', { min: 5, max: 15 });
-            modeData.target = rand(minS * 1000, maxS * 1000);
+            modeData.target = snapToDifficulty(rand(minS * 1000, maxS * 1000));
             const hideInput = parseInt(el('m7-hide')?.value ?? 50, 10);
             const hidePercent = clamp(Number.isNaN(hideInput) ? 50 : hideInput, 10, 90) / 100;
             modeData.hideAt = modeData.target * hidePercent;
@@ -2380,7 +2448,7 @@
             modeData.signalFired = false;
             modeData.misfires = {};
             modeData.freezePoint = rand(0.3, 0.7);
-            modeData.hiddenDelay = rand(minS * 1000, maxS * 1000);
+            modeData.hiddenDelay = snapToDifficulty(rand(minS * 1000, maxS * 1000));
             const freezeAt = cdTime * (1 - modeData.freezePoint);
             modeData.freezeAtMs = freezeAt;
             modeData.frozen = false;
@@ -2599,7 +2667,7 @@
     }
     function blindHit(pId) { precisionHit(pId); }
     function relayTargetForTurn() {
-        return rand(modeData.minTarget, modeData.maxTarget);
+        return snapToDifficulty(rand(modeData.minTarget, modeData.maxTarget));
     }
 
     function relaySetTurn() {
@@ -2714,15 +2782,21 @@
         modeData.alive.forEach(id => {
             const btn = el(`btn-p${id}`);
             if (!btn) return;
-            btn.classList.remove('active', 'cooldown', 'pulse-active');
+            btn.classList.remove('active', 'cooldown', 'pulse-active', 'bomb-holder');
             btn.style.borderColor = '';
+            // Remove any old hold-bar
+            const oldBar = btn.querySelector('.hold-bar');
+            if (oldBar) oldBar.remove();
             if (id === holderId) {
                 btn.disabled = true;
-                btn.style.borderColor = 'var(--danger)';
-                btn.classList.add('active');
-                btn.classList.add('cooldown');
+                btn.classList.add('active', 'cooldown', 'bomb-holder');
                 el(`stat-p${id}`).textContent = '\u{1F4A3} BOMB';
                 el(`sub-p${id}`).textContent = `Hold ${(modeData.minHold / 1000).toFixed(1)}s\u2026`;
+                // Add hold-progress bar
+                const bar = document.createElement('div');
+                bar.className = 'hold-bar';
+                bar.id = `hold-bar-p${id}`;
+                btn.appendChild(bar);
             } else {
                 btn.disabled = true;
                 // Show cooldown indicator if this player can't receive due to rotation rule
@@ -2743,7 +2817,10 @@
             if (!btn) return;
             if (id === holderId) {
                 btn.disabled = true;
-                btn.classList.remove('cooldown');
+                btn.classList.remove('cooldown', 'bomb-holder');
+                // Remove hold bar now that hold is complete
+                const bar = btn.querySelector('.hold-bar');
+                if (bar) bar.style.width = '100%';
                 el(`stat-p${id}`).textContent = '\u{1F4A3} BOMB';
                 el(`sub-p${id}`).textContent = 'PASS NOW!';
             } else {
@@ -2782,8 +2859,15 @@
 
         modeData.passCounts[holderId] += 1;
         modeData.passesReceived[pId] = (modeData.passesReceived[pId] || 0) + 1;
-        modeData.passFlashUntil = performance.now() + 180;
+        modeData.passFlashUntil = performance.now() + 300;
         display.textContent = '\u{1F525} PASS!';
+
+        // Show pass direction in status text briefly
+        const giver = players.find(p => p.id === holderId);
+        const receiver = players.find(p => p.id === pId);
+        if (giver && receiver) {
+            showToast(`\u{1F4A3} ${safe(giver.name)} \u2192 ${safe(receiver.name)}`, 'var(--danger)');
+        }
 
         // Track pass rotation
         modeData.lastPasser = holderId;
@@ -2801,13 +2885,21 @@
         clearTimers();
         gs = STATE.RESULT;
         snd('exp'); shakeUI(); hap([100, 50, 100, 50, 200]);
-        display.className = 'stopwatch-display danger';
-        display.textContent = 'BOOM';
+
+        // Explosion flash on arena container
+        const gc = el('arena-container');
+        gc.classList.add('bomb-exploding');
+        gc.addEventListener('animationend', () => gc.classList.remove('bomb-exploding'), { once: true });
+
+        display.className = 'stopwatch-display danger boom-pop';
+        display.textContent = '\u{1F4A5} BOOM';
         const loserId = modeData.alive[modeData.holderIdx];
         const loser = players.find(p => p.id === loserId);
         modeData.holdTotals[loserId] = (modeData.holdTotals[loserId] || 0) + (performance.now() - modeData.holdStart);
         const btn = el(`btn-p${loserId}`);
-        if (btn) btn.classList.add('eliminated');
+        if (btn) { btn.classList.remove('bomb-holder'); btn.classList.add('eliminated'); }
+        // Remove hold bars from all buttons
+        modeData.alive.forEach(id => { const b = el(`btn-p${id}`); if (b) { const bar = b.querySelector('.hold-bar'); if (bar) bar.remove(); } });
 
         // Participation-weighted scoring:
         // - Passing and touching the bomb both contribute to score
@@ -2816,7 +2908,8 @@
         const totalPasses = realActivePlayers().reduce((sum, p) => sum + (modeData.passCounts[p.id] || 0), 0);
         const totalTouches = realActivePlayers().reduce((sum, p) => sum + (modeData.touchCounts[p.id] || 0), 0);
 
-        let html = `<div style="color:var(--danger);font-size:1.2rem;font-weight:900;margin-bottom:10px;">${safe(loser.name)} exploded${modeData.explosionCause === 'SPONTANEOUS' ? ' unexpectedly' : ''}!</div><div class="result-grid">`;
+        const causeText = modeData.explosionCause === 'SPONTANEOUS' ? ' unexpectedly' : '';
+        let html = `<div style="color:var(--danger);font-size:1.3rem;font-weight:900;margin-bottom:6px;">\u{1F4A5} ${safe(loser.name)} exploded${causeText}!</div><div class="result-grid">`;
         realActivePlayers().forEach(p => {
             const survived = p.id !== loserId;
             const passes = modeData.passCounts[p.id] || 0;
@@ -2834,9 +2927,9 @@
             p.score += pts;
             html += `
                 <div class="res-card">
-                    <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
-                    <div class="res-val">${passes} pass${passes === 1 ? '' : 'es'} • ${touches} touch${touches === 1 ? '' : 'es'}</div>
-                    <div class="res-note">Held ${(heldMs / 1000).toFixed(1)}s total${modeData.riskBonus ? ` • Risk ${(riskMs / 1000).toFixed(1)}s` : ''}${survived && touches === 0 ? ' • Fair-play bonus' : ''}</div>
+                    <div class="res-name" style="color:var(${p.var})">${safe(p.name)}${survived ? '' : ' \u{1F4A5}'}</div>
+                    <div class="res-val">${passes} pass${passes === 1 ? '' : 'es'} \u2022 ${touches} touch${touches === 1 ? '' : 'es'}</div>
+                    <div class="res-note">Held ${(heldMs / 1000).toFixed(1)}s total${modeData.riskBonus ? ` \u2022 Risk ${(riskMs / 1000).toFixed(1)}s` : ''}${survived && touches === 0 ? ' \u2022 Fair-play bonus' : ''}</div>
                     <div class="res-pts ${pts === 0 ? 'zero' : ''}">${pts > 0 ? '+' : ''}${pts}</div>
                 </div>`;
         });
