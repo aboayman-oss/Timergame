@@ -908,10 +908,6 @@
                     <label class="toggle-label" id="haptic-label"></label>
                     <label class="toggle"><input type="checkbox" id="s-haptic" checked onchange="savePrefs()"><span class="toggle-track"></span></label>
                 </div>
-                <div class="toggle-row">
-                    <label class="toggle-label"><span>⚡ Distractions (Precision)</span></label>
-                    <label class="toggle"><input type="checkbox" id="s-distract" onchange="savePrefs()"><span class="toggle-track"></span></label>
-                </div>
             </div>
 
             <button class="btn btn-outline" onclick="closeSettings()" style="margin-top:10px;">Done</button>
@@ -995,7 +991,7 @@
         },
         3: {
             n: 'Relay', short: 'Relay',
-            desc: 'Players take turns hitting checkpoints in sequence. Choose Individual Laps (timer resets each turn) or Master Sabotage (continuous timer where early/late taps affect the next player).',
+            desc: 'Players take turns hitting checkpoints in sequence. Easy/Medium use Individual Laps (timer resets each turn). Hard uses Master Sabotage — the continuous timer means early or late taps shift the next player\'s window.',
             config: `
                 <div class="difficulty-presets">
                     <button class="preset-btn active" data-preset="easy" onclick="applyPreset(3, 'easy')">Easy</button>
@@ -1007,16 +1003,10 @@
                     Advanced Settings
                 </div>
                 <div class="advanced-section">
-                    <div class="config-item config-full">
-                        <label>Variant</label>
-                        <select id="m3-variant" style="width:100%;padding:8px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;">
-                            <option value="individual">Option A — Individual Laps (timer resets)</option>
-                            <option value="sabotage">Option B — Master Sabotage Timer</option>
-                        </select>
-                    </div>
                     <div class="config-item"><label>Min Target (s)</label><input type="number" id="m3-min" value="2.5" step="0.1" min="0.5" max="10"></div>
                     <div class="config-item"><label>Max Target (s)</label><input type="number" id="m3-max" value="5" step="0.1" min="1" max="12"></div>
                     <div class="config-item"><label>Laps</label><input type="number" id="m3-laps" value="2" min="1" max="10" step="1"></div>
+                    <div class="config-note">Hard difficulty automatically activates Master Sabotage mode.</div>
                 </div>`
         },
         4: {
@@ -1099,7 +1089,7 @@
         },
         8: {
             n: 'Reflex Duel', short: 'Reflex',
-            desc: 'A countdown runs then freezes. After a hidden delay the signal flashes — tap immediately! Tap before the signal = misfire. Fastest reaction wins!',
+            desc: 'A 5s countdown runs then freezes. After a hidden delay the signal fires — tap immediately! The freeze is the trick. Tap before the signal = misfire. Fastest reaction wins!',
             config: `
                 <div class="difficulty-presets">
                     <button class="preset-btn active" data-preset="easy" onclick="applyPreset(8, 'easy')">Easy</button>
@@ -1111,10 +1101,9 @@
                     Advanced Settings
                 </div>
                 <div class="advanced-section">
-                    <div class="config-item"><label>Countdown (s)</label><input type="number" id="m8-cd" value="5" min="1" max="10" step="0.5"></div>
-                    <div class="config-item"><label>Extra Delay Min (s)</label><input type="number" id="m8-min" value="2" min="0.5" max="5" step="0.5"></div>
-                    <div class="config-item"><label>Extra Delay Max (s)</label><input type="number" id="m8-max" value="5" min="1" max="8" step="0.5"></div>
-                    <div class="config-note">Countdown freezes, then after a random hidden delay the signal fires. Tap early = misfire!</div>
+                    <div class="config-item"><label>Delay Min (s)</label><input type="number" id="m8-dmin" value="1" min="0.5" max="5" step="0.5"></div>
+                    <div class="config-item"><label>Delay Max (s)</label><input type="number" id="m8-dmax" value="2" min="1" max="8" step="0.5"></div>
+                    <div class="config-note">Countdown always 5s. Freeze point &amp; false-draw flashes scale with difficulty.</div>
                 </div>`
         }
     };
@@ -1122,44 +1111,44 @@
 
     const MODE_PRESETS = {
         1: {
-            easy: { 'm1-min': 5, 'm1-max': 10 },
-            medium: { 'm1-min': 3, 'm1-max': 8 },
-            hard: { 'm1-min': 2, 'm1-max': 5 }
+            easy:   { 'm1-min': 5,  'm1-max': 10 },
+            medium: { 'm1-min': 4,  'm1-max': 12 },
+            hard:   { 'm1-min': 3,  'm1-max': 18 }
         },
         2: {
-            easy: { 'm2-min': 7, 'm2-max': 10 },
-            medium: { 'm2-min': 5, 'm2-max': 8 },
-            hard: { 'm2-min': 3.5, 'm2-max': 6 }
+            easy:   { 'm2-min': 3,  'm2-max': 6  },
+            medium: { 'm2-min': 5,  'm2-max': 10 },
+            hard:   { 'm2-min': 8,  'm2-max': 18 }
         },
         3: {
-            easy: { 'm3-min': 3.5, 'm3-max': 5.5, 'm3-laps': 2 },
-            medium: { 'm3-min': 2.5, 'm3-max': 4.5, 'm3-laps': 3 },
-            hard: { 'm3-min': 1.75, 'm3-max': 3.5, 'm3-laps': 4 }
+            easy:   { 'm3-min': 3.5, 'm3-max': 5.5, 'm3-laps': 2 },
+            medium: { 'm3-min': 2.5, 'm3-max': 4.0, 'm3-laps': 3 },
+            hard:   { 'm3-min': 2.0, 'm3-max': 3.5, 'm3-laps': 4 }
         },
         4: {
-            easy: { baseBuffer: 3.5, varMin: 1.5, varMax: 4.0, surgeCount: 1, surgeIntensity: 0.6 },
-            medium: { baseBuffer: 2.5, varMin: 1.0, varMax: 3.0, surgeCount: 2, surgeIntensity: 0.85 },
-            hard: { baseBuffer: 1.5, varMin: 0.5, varMax: 1.5, surgeCount: 3, surgeIntensity: 0.98 }
+            easy:   { baseBuffer: 3.5, varMin: 1.5, varMax: 4.0, surgeCount: 2, surgeIntensity: 0.4,  minHoldMs: 2000, fuseCap: null },
+            medium: { baseBuffer: 2.5, varMin: 1.0, varMax: 3.0, surgeCount: 2, surgeIntensity: 0.85, minHoldMs: 1500, fuseCap: null },
+            hard:   { baseBuffer: 1.5, varMin: 0.5, varMax: 1.5, surgeCount: 3, surgeIntensity: 0.98, minHoldMs:  800, fuseCap: 14000 }
         },
         5: {
-            easy: { 'm5-min': 7, 'm5-max': 10 },
-            medium: { 'm5-min': 5, 'm5-max': 8 },
-            hard: { 'm5-min': 3.5, 'm5-max': 6 }
+            easy:   { 'm5-min': 4,  'm5-max': 7  },
+            medium: { 'm5-min': 6,  'm5-max': 12 },
+            hard:   { 'm5-min': 10, 'm5-max': 20 }
         },
         6: {
-            easy: { 'm6-min': 5, 'm6-max': 10 },
-            medium: { 'm6-min': 3, 'm6-max': 8 },
-            hard: { 'm6-min': 2, 'm6-max': 5 }
+            easy:   { 'm6-min': 4,  'm6-max': 8  },
+            medium: { 'm6-min': 6,  'm6-max': 14 },
+            hard:   { 'm6-min': 10, 'm6-max': 22 }
         },
         7: {
-            easy: { 'm7-min': 8, 'm7-max': 20, 'm7-hide': 65 },
+            easy:   { 'm7-min': 8, 'm7-max': 20, 'm7-hide': 65 },
             medium: { 'm7-min': 5, 'm7-max': 15, 'm7-hide': 50 },
-            hard: { 'm7-min': 3, 'm7-max': 10, 'm7-hide': 25 }
+            hard:   { 'm7-min': 5, 'm7-max': 12, 'm7-hide': 20 }
         },
         8: {
-            easy: { 'm8-cd': 5, 'm8-min': 2, 'm8-max': 5 },
-            medium: { 'm8-cd': 3, 'm8-min': 1, 'm8-max': 3 },
-            hard: { 'm8-cd': 2, 'm8-min': 0.5, 'm8-max': 1.5 }
+            easy:   { 'm8-dmin': 1.0, 'm8-dmax': 2.0 },
+            medium: { 'm8-dmin': 2.0, 'm8-dmax': 4.0 },
+            hard:   { 'm8-dmin': 3.0, 'm8-dmax': 6.0 }
         }
     };
 
@@ -1208,6 +1197,38 @@
         modeData.heartbeatOsc = null;
         modeData.heartbeatLfo = null;
         modeData.heartbeatAc = null;
+        // New interval-based heartbeat
+        if (modeData.heartbeatIntervalId) {
+            clearInterval(modeData.heartbeatIntervalId);
+            modeData.heartbeatIntervalId = null;
+        }
+    }
+
+    function startHeartbeat() {
+        // Two-beat "lub-dub" pulse at ~1.2 Hz
+        const intervalId = addInterval(() => {
+            if (!el('s-sound').checked) return;
+            try {
+                const ac = getAudioCtx();
+                const t = ac.currentTime;
+                // First beat (lub) — 80 Hz, short burst
+                const o1 = ac.createOscillator(), g1 = ac.createGain();
+                o1.connect(g1); g1.connect(ac.destination);
+                o1.type = 'sine'; o1.frequency.value = 80;
+                g1.gain.setValueAtTime(0.38, t);
+                g1.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+                o1.start(t); o1.stop(t + 0.14);
+                // Second beat (dub) — 90 Hz, slightly longer, offset 120ms
+                const o2 = ac.createOscillator(), g2 = ac.createGain();
+                o2.connect(g2); g2.connect(ac.destination);
+                o2.type = 'sine'; o2.frequency.value = 90;
+                g2.gain.setValueAtTime(0.001, t + 0.12);
+                g2.gain.linearRampToValueAtTime(0.26, t + 0.17);
+                g2.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
+                o2.start(t + 0.12); o2.stop(t + 0.33);
+            } catch(e) {}
+        }, 833); // ~1.2 Hz
+        modeData.heartbeatIntervalId = intervalId;
     }
 
     function clearHiddenTimer() {
@@ -1458,7 +1479,6 @@
             names: players.map(p => p.name),
             sound: el('s-sound')?.checked ?? true,
             haptic: el('s-haptic')?.checked ?? true,
-            distract: el('s-distract')?.checked ?? false,
             lastMode: currentMode,
             lastDifficulty: currentDifficulty,
             modeConfigs: modeConfigCache
@@ -1476,7 +1496,6 @@
             syncPlayerFlags();
             if (typeof prefs.sound === 'boolean') el('s-sound').checked = prefs.sound;
             if (typeof prefs.haptic === 'boolean') el('s-haptic').checked = prefs.haptic;
-            if (typeof prefs.distract === 'boolean') el('s-distract').checked = prefs.distract;
             if (prefs.lastMode && MODES[prefs.lastMode]) currentMode = Number(prefs.lastMode);
             if (['easy','medium','hard'].includes(prefs.lastDifficulty)) currentDifficulty = prefs.lastDifficulty;
             if (prefs.modeConfigs && typeof prefs.modeConfigs === 'object') modeConfigCache = prefs.modeConfigs;
@@ -1883,6 +1902,8 @@
         if (echoTrack) echoTrack.remove();
         const replayBtn = el('echo-replay-btn');
         if (replayBtn) replayBtn.remove();
+        const fakeCounter = el('fake-counter');
+        if (fakeCounter) fakeCounter.remove();
         renderScoreboard();
         renderProgress();
         renderHud();
@@ -2013,7 +2034,9 @@
         const btn = el(`btn-p${pId}`);
         if (!btn || btn.disabled) return;
         if (e) ripple(e, btn);
-        hap([20]); snd('tap');
+        hap([20]);
+        // Mode 6: silent tap so other players can't use tap sound as a timing cue
+        if (currentMode !== 6) snd('tap');
 
         if (currentMode === 2) return precisionHit(pId);
         if (currentMode === 1) return manualPredictHit(pId);
@@ -2045,26 +2068,41 @@
             const [minS, maxS] = sanitizeRange('m1-min', 'm1-max', { min: 3, max: 8 });
             modeData.target = snapToDifficulty(rand(minS * 1000, maxS * 1000));
             modeData.stopped = false;
-            showToast('Clock is running... invisibly!');
+            if (currentDifficulty === 'easy') {
+                showToast('Clock running! (Snaps to whole seconds on Easy)', 'var(--text-dim)');
+            } else {
+                showToast('Clock is running... invisibly!');
+            }
             snd('go');
-            modeData.heartbeatAc = null;
-            try {
-                const ac = getAudioCtx();
-                modeData.heartbeatAc = ac;
-                const osc = ac.createOscillator();
-                const gain = ac.createGain();
-                osc.connect(gain); gain.connect(ac.destination);
-                osc.type = 'sine'; osc.frequency.value = 1.5;
-                gain.gain.value = 0.04;
-                const lfo = ac.createOscillator();
-                const lfoGain = ac.createGain();
-                lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
-                lfo.frequency.value = 0.3 + Math.random() * 0.5;
-                lfoGain.gain.value = 0.8;
-                lfo.start(); osc.start();
-                modeData.heartbeatOsc = osc;
-                modeData.heartbeatLfo = lfo;
-            } catch(e) {}
+            // Audible heartbeat
+            startHeartbeat();
+            // Difficulty-scaled distractions
+            if (currentDifficulty === 'medium') {
+                // Audio decoy: random off-rhythm tick during hidden phase
+                const decoyAt = 800 + Math.random() * Math.max(0, modeData.target * 0.6 - 800);
+                addTimeout(() => {
+                    if (gs !== STATE.RUNNING || modeData.stopped) return;
+                    snd('tick');
+                }, decoyAt);
+            } else if (currentDifficulty === 'hard') {
+                // False heartbeat at a slightly different rhythm and pitch
+                addTimeout(() => {
+                    modeData.falseHbInterval = addInterval(() => {
+                        if (gs !== STATE.RUNNING || modeData.stopped) return;
+                        if (!el('s-sound').checked) return;
+                        try {
+                            const ac = getAudioCtx();
+                            const t = ac.currentTime;
+                            const o = ac.createOscillator(), g = ac.createGain();
+                            o.connect(g); g.connect(ac.destination);
+                            o.type = 'sine'; o.frequency.value = 68;
+                            g.gain.setValueAtTime(0.22, t);
+                            g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+                            o.start(t); o.stop(t + 0.12);
+                        } catch(e) {}
+                    }, 920);
+                }, 250 + Math.random() * 350);
+            }
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
                 if (elapsed >= modeData.target && !modeData.stopped) {
@@ -2126,24 +2164,8 @@
             modeData.stopped = false;
             showToast('Clock is running... invisibly!');
             snd('go');
-            modeData.heartbeatAc = null;
-            try {
-                const ac = getAudioCtx();
-                modeData.heartbeatAc = ac;
-                const osc = ac.createOscillator();
-                const gain = ac.createGain();
-                osc.connect(gain); gain.connect(ac.destination);
-                osc.type = 'sine'; osc.frequency.value = 1.5;
-                gain.gain.value = 0.04;
-                const lfo = ac.createOscillator();
-                const lfoGain = ac.createGain();
-                lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
-                lfo.frequency.value = 0.3 + Math.random() * 0.5;
-                lfoGain.gain.value = 0.8;
-                lfo.start(); osc.start();
-                modeData.heartbeatOsc = osc;
-                modeData.heartbeatLfo = lfo;
-            } catch(e) {}
+            // Audible heartbeat
+            startHeartbeat();
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
                 if (elapsed >= modeData.target && !modeData.stopped) {
@@ -2157,11 +2179,32 @@
                     modeData.guesses = {};
                     modeData.lockedCount = 0;
                     modeData.guessStart = performance.now();
+                    modeData.m6FreezeUntil = 0;
+                    modeData.m6FreezeVal = 0;
+                    modeData.m6SpeedStart = 0;
+                    modeData.m6SpeedEnd = 0;
                     clearHiddenTimer();
                     display.className = 'stopwatch-display running';
                     showToast('TAP when the counter matches!', 'var(--success)');
                     renderArena(ids);
                     updateKbHint();
+                    // Difficulty-scaled distractions on the visible counter
+                    if (currentDifficulty === 'medium' || currentDifficulty === 'hard') {
+                        const stutterAt = 400 + Math.random() * 2000;
+                        addTimeout(() => {
+                            if (gs !== STATE.RUNNING || modeData.lockedCount >= realActivePlayers().length) return;
+                            modeData.m6FreezeUntil = performance.now() + 80;
+                            modeData.m6FreezeVal = performance.now() - modeData.guessStart;
+                        }, stutterAt);
+                    }
+                    if (currentDifficulty === 'hard') {
+                        const speedAt = 1000 + Math.random() * 2000;
+                        addTimeout(() => {
+                            if (gs !== STATE.RUNNING || modeData.lockedCount >= realActivePlayers().length) return;
+                            modeData.m6SpeedStart = performance.now();
+                            modeData.m6SpeedEnd = performance.now() + 500;
+                        }, speedAt);
+                    }
                     // Auto-end timeout: prevent infinite hang
                     addTimeout(() => {
                         if (modeData.lockedCount < realActivePlayers().length) {
@@ -2170,8 +2213,17 @@
                     }, 60000);
                     liveDisplay(() => {
                         if (modeData.lockedCount >= realActivePlayers().length) return false;
-                        const guessElapsed = performance.now() - modeData.guessStart;
-                        display.textContent = fmt(guessElapsed);
+                        const now = performance.now();
+                        const rawElapsed = now - modeData.guessStart;
+                        let displayElapsed = rawElapsed;
+                        if (modeData.m6FreezeUntil && now < modeData.m6FreezeUntil) {
+                            displayElapsed = modeData.m6FreezeVal;
+                        } else if (modeData.m6SpeedStart && modeData.m6SpeedEnd && now >= modeData.m6SpeedStart && now <= modeData.m6SpeedEnd) {
+                            const speedPhaseElapsed = now - modeData.m6SpeedStart;
+                            const baseElapsed = modeData.m6SpeedStart - modeData.guessStart;
+                            displayElapsed = baseElapsed + speedPhaseElapsed * 1.5;
+                        }
+                        display.textContent = fmt(Math.max(0, displayElapsed));
                     });
                     return false;
                 }
@@ -2187,15 +2239,38 @@
             showToast(`Target this round: ${fmt(modeData.target)}s`);
             renderArena(ids);
             updateKbHint();
-            if (el('s-distract')?.checked) {
+            // Difficulty-scaled distractions (no toggle needed)
+            if (currentDifficulty === 'medium') {
+                const flashAt = rand(800, Math.max(900, modeData.target - 400));
+                addTimeout(() => {
+                    if (gs !== STATE.RUNNING) return;
+                    el('arena-container').classList.add('distraction-flash');
+                    setTimeout(() => el('arena-container').classList.remove('distraction-flash'), 150);
+                }, flashAt);
+            } else if (currentDifficulty === 'hard') {
+                // Frequent flashes
                 modeData.distractInterval = addInterval(() => {
                     if (gs !== STATE.RUNNING) return;
-                    if (Math.random() < 0.4) {
+                    if (Math.random() < 0.55) {
                         el('arena-container').classList.add('distraction-flash');
                         setTimeout(() => el('arena-container').classList.remove('distraction-flash'), 150);
                     }
-                    if (Math.random() < 0.25) shakeUI();
-                }, 1500 + Math.random() * 2000);
+                    if (Math.random() < 0.2) shakeUI();
+                }, 700 + Math.random() * 800);
+                // Fake counter (slightly wrong speed)
+                const fakeCounter = document.createElement('div');
+                fakeCounter.id = 'fake-counter';
+                fakeCounter.style.cssText = 'font-family:Orbitron,sans-serif;font-size:1.8rem;font-weight:900;color:rgba(107,127,163,0.32);text-align:center;margin:4px 0 2px;letter-spacing:2px;pointer-events:none;user-select:none;';
+                fakeCounter.textContent = '00.000';
+                display.parentNode.insertBefore(fakeCounter, display.nextSibling);
+                const fakeRate = 0.80 + Math.random() * 0.40;
+                modeData.fakeStartTime = performance.now();
+                modeData.fakeRate = fakeRate;
+                addInterval(() => {
+                    if (gs !== STATE.RUNNING) return;
+                    const fc = el('fake-counter');
+                    if (fc) fc.textContent = fmt((performance.now() - modeData.fakeStartTime) * modeData.fakeRate);
+                }, 33);
             }
             addTimeout(endRound, modeData.target + 4500);
             return;
@@ -2206,7 +2281,8 @@
             modeData.minTarget = minTarget * 1000;
             modeData.maxTarget = maxTarget * 1000;
             modeData.laps = clamp(parseInt(el('m3-laps').value, 10) || 2, 1, 10);
-            modeData.variant = el('m3-variant')?.value || 'individual';
+            // Variant determined by difficulty: Hard → sabotage, Easy/Medium → individual
+            modeData.variant = currentDifficulty === 'hard' ? 'sabotage' : 'individual';
             modeData.roundMax = realActivePlayers().length * modeData.laps;
             modeData.turnIndex = 0;
             modeData.scores = Object.fromEntries(ids.map(id => [id, 0]));
@@ -2238,6 +2314,8 @@
             const fuseBase = playerCount * preset.baseBuffer * 1000;
             const fuseVar = rand(playerCount * preset.varMin * 1000, playerCount * preset.varMax * 1000);
             modeData.fuse = fuseBase + fuseVar;
+            // Cap fuse for Hard to prevent accidental generosity with many players
+            if (preset.fuseCap) modeData.fuse = Math.min(modeData.fuse, preset.fuseCap);
 
             modeData.alive = ids.slice();
             modeData.holderIdx = Math.floor(Math.random() * modeData.alive.length);
@@ -2246,9 +2324,9 @@
             modeData.holdTotals = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.passesReceived = Object.fromEntries(ids.map(id => [id, 0]));
             modeData.locked = null;
-            // Min hold per turn: 1.5s base, randomized each turn in bombSetTurn
-            modeData.minHold = 1500;
-            modeData.baseMinHold = 1500;
+            // Min hold scales with difficulty via preset
+            modeData.minHold = preset.minHoldMs;
+            modeData.baseMinHold = preset.minHoldMs;
             modeData.riskBonus = el('m4-risk')?.checked !== false;
             modeData.holdStart = performance.now();
             modeData.riskTime = Object.fromEntries(ids.map(id => [id, 0]));
@@ -2402,6 +2480,25 @@
             showToast(`Target this round: ${fmt(modeData.target)}s — do not go over`);
             renderArena(ids);
             updateKbHint();
+            // Danger zone: subtle background warming as you approach the cliff edge
+            const dangerFraction = currentDifficulty === 'easy' ? 0.20 : (currentDifficulty === 'medium' ? 0.10 : 0);
+            if (dangerFraction > 0) {
+                liveDisplay(() => {
+                    if (gs !== STATE.RUNNING) { el('arena-container').style.background = ''; return false; }
+                    const elapsed = performance.now() - startTime;
+                    const pct = elapsed / modeData.target;
+                    const dangerStart = 1 - dangerFraction;
+                    if (pct >= dangerStart && pct < 1) {
+                        const intensity = (pct - dangerStart) / dangerFraction;
+                        el('arena-container').style.background = `rgba(255, ${Math.round(15 * (1 - intensity))}, 0, ${0.04 + intensity * 0.11})`;
+                    } else if (pct >= 1) {
+                        el('arena-container').style.background = '';
+                        return false;
+                    } else {
+                        el('arena-container').style.background = '';
+                    }
+                });
+            }
             addTimeout(endRound, modeData.target + 4500);
             return;
         }
@@ -2411,7 +2508,9 @@
             modeData.target = snapToDifficulty(rand(minS * 1000, maxS * 1000));
             const hideInput = parseInt(el('m7-hide')?.value ?? 50, 10);
             const hidePercent = clamp(Number.isNaN(hideInput) ? 50 : hideInput, 10, 90) / 100;
-            modeData.hideAt = modeData.target * hidePercent;
+            // Minimum 2 seconds of visible countdown regardless of target/percentage
+            const MIN_VISIBLE_MS = 2000;
+            modeData.hideAt = clamp(modeData.target * hidePercent, MIN_VISIBLE_MS, modeData.target * 0.95);
             modeData.hidden = false;
             modeData.hits = {};
             modeData.done = 0;
@@ -2419,6 +2518,26 @@
             updateKbHint();
             showToast(`Countdown: ${fmt(modeData.target)}s • Hides at ${Math.round(hidePercent * 100)}%`);
             display.className = 'stopwatch-display running';
+            // Schedule fake beep distractions during the blind phase
+            if (currentDifficulty === 'medium' || currentDifficulty === 'hard') {
+                const blindDuration = modeData.target - modeData.hideAt;
+                const fakeCount = currentDifficulty === 'hard' ? 2 : 1;
+                for (let i = 0; i < fakeCount; i++) {
+                    const earliest = modeData.hideAt + 300 + i * 400;
+                    const latest = modeData.target - 400;
+                    if (latest > earliest) {
+                        const fakeAt = earliest + Math.random() * (latest - earliest);
+                        addTimeout(() => {
+                            if (gs !== STATE.RUNNING || !modeData.hidden) return;
+                            snd('tick');
+                            if (currentDifficulty === 'hard') {
+                                el('arena-container').classList.add('distraction-flash');
+                                setTimeout(() => el('arena-container').classList.remove('distraction-flash'), 150);
+                            }
+                        }, fakeAt);
+                    }
+                }
+            }
             liveDisplay(() => {
                 const elapsed = performance.now() - startTime;
                 const remaining = Math.max(0, modeData.target - elapsed);
@@ -2440,18 +2559,31 @@
         }
 
         if (currentMode === 8) {
-            const cdTime = (parseFloat(el('m8-cd')?.value) || 3) * 1000;
-            const [minS, maxS] = sanitizeRange('m8-min', 'm8-max', { min: 1, max: 3 });
+            // Difficulty-driven parameters
+            const duelParams = {
+                easy:   { freezeMin: 0.50, freezeMax: 0.70, delayMin: 1.0, delayMax: 2.0, falseDraw: 0, misfirePenalty: 0 },
+                medium: { freezeMin: 0.30, freezeMax: 0.60, delayMin: 2.0, delayMax: 4.0, falseDraw: 1, misfirePenalty: -200 },
+                hard:   { freezeMin: 0.10, freezeMax: 0.40, delayMin: 3.0, delayMax: 6.0, falseDraw: 2, misfirePenalty: -1 }
+            };
+            const dp = duelParams[currentDifficulty] || duelParams.easy;
+            // Allow advanced overrides for delay min/max
+            const advDelayMin = parseFloat(el('m8-dmin')?.value) || dp.delayMin;
+            const advDelayMax = parseFloat(el('m8-dmax')?.value) || dp.delayMax;
+            const cdTime = 5000; // Always 5 seconds
+            const freezeFraction = rand(dp.freezeMin, dp.freezeMax);
+            const delayMs = rand(advDelayMin * 1000, advDelayMax * 1000);
+            const freezeAt = cdTime * freezeFraction;
             modeData.cdTime = cdTime;
             modeData.hits = {};
             modeData.done = 0;
             modeData.signalFired = false;
             modeData.misfires = {};
-            modeData.freezePoint = rand(0.3, 0.7);
-            modeData.hiddenDelay = snapToDifficulty(rand(minS * 1000, maxS * 1000));
-            const freezeAt = cdTime * (1 - modeData.freezePoint);
+            modeData.misfirePenalty = dp.misfirePenalty;
+            modeData.freezePoint = freezeFraction;
+            modeData.hiddenDelay = delayMs;
             modeData.freezeAtMs = freezeAt;
             modeData.frozen = false;
+            modeData.falseDraw = dp.falseDraw;
             display.className = 'stopwatch-display running';
             showToast('Watch the countdown... wait for the signal!');
             renderArena(ids, p => `${KEYS[p.id - 1].toUpperCase()} — WAIT`, () => '...');
@@ -2464,6 +2596,27 @@
                     modeData.frozenValue = remaining;
                     display.textContent = fmt(remaining);
                     showToast('FROZEN... wait for it...');
+                    // Schedule false draw flashes before the real signal
+                    if (modeData.falseDraw > 0) {
+                        const usableWindow = Math.max(200, delayMs - 300);
+                        for (let i = 0; i < modeData.falseDraw; i++) {
+                            const slot = Math.floor(usableWindow / (modeData.falseDraw + 1));
+                            const falseAt = 150 + i * slot + Math.random() * (slot * 0.6);
+                            addTimeout(() => {
+                                if (gs !== STATE.RUNNING || modeData.signalFired) return;
+                                const savedColor = display.style.color;
+                                display.className = 'stopwatch-display';
+                                display.style.color = 'var(--success)';
+                                display.textContent = 'DRAW!';
+                                hap([25]);
+                                addTimeout(() => {
+                                    if (gs !== STATE.RUNNING || modeData.signalFired) return;
+                                    display.style.color = savedColor;
+                                    display.textContent = fmt(modeData.frozenValue);
+                                }, 80);
+                            }, falseAt);
+                        }
+                    }
                     addTimeout(() => {
                         if (gs !== STATE.RUNNING) return;
                         modeData.signalFired = true;
@@ -2474,7 +2627,7 @@
                         showToast('DRAW! TAP NOW!', 'var(--success)');
                         snd('go'); hap([50, 30, 80]);
                         addTimeout(endRound, 3000);
-                    }, modeData.hiddenDelay);
+                    }, delayMs);
                     return false;
                 }
                 if (!modeData.frozen) {
@@ -2566,17 +2719,9 @@
         const btn = el(`btn-p${pId}`);
         btn.disabled = true; btn.classList.add('done');
 
-        // Early/Late feedback (safe: only shown on your own button)
-        const diff = elapsed - modeData.target;
-        const timing = diff < -50 ? 'EARLY' : (diff > 50 ? 'LATE' : 'PERFECT');
-        const timingColor = timing === 'EARLY' ? 'var(--warn)' : (timing === 'LATE' ? 'var(--danger)' : 'var(--success)');
-        el(`stat-p${pId}`).textContent = timing;
-        el(`stat-p${pId}`).style.color = timingColor;
-        const pHitBtn = el(`btn-p${pId}`);
-        if (pHitBtn) {
-            const flash = timing === 'PERFECT' ? 'perfect-flash' : (timing === 'EARLY' ? 'good-flash' : '');
-            if (flash) { pHitBtn.classList.add(flash); setTimeout(() => pHitBtn.classList.remove(flash), 580); }
-        }
+        // Show neutral lock confirmation — timing feedback revealed at round end
+        el(`stat-p${pId}`).textContent = 'LOCKED ✓';
+        el(`stat-p${pId}`).style.color = 'var(--success)';
 
         modeData.done += 1;
         if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
@@ -2605,19 +2750,15 @@
         btn.disabled = true; btn.classList.add('done');
         modeData.done += 1;
 
-        // Early/Late feedback (Cliff: going over = BUST)
+        // BUST is shown immediately (changes game state); non-bust → neutral lock
         const diff = elapsed - modeData.target;
         if (diff > 0) {
             el(`stat-p${pId}`).textContent = 'BUST!';
             el(`stat-p${pId}`).style.color = 'var(--danger)';
             btn.classList.add('bust-flash');
         } else {
-            const timing = diff < -(modeData.target * 0.1) ? 'EARLY' : 'CLOSE!';
-            const timingColor = timing === 'EARLY' ? 'var(--warn)' : 'var(--success)';
-            el(`stat-p${pId}`).textContent = timing;
-            el(`stat-p${pId}`).style.color = timingColor;
-            const zFlash = timing === 'CLOSE!' ? 'perfect-flash' : 'good-flash';
-            btn.classList.add(zFlash); setTimeout(() => btn.classList.remove(zFlash), 580);
+            el(`stat-p${pId}`).textContent = 'LOCKED ✓';
+            el(`stat-p${pId}`).style.color = 'var(--success)';
         }
 
         if (modeData.done >= realActivePlayers().length) {
@@ -2750,8 +2891,18 @@
 
         if (sub) {
             const indicator = tapTiming === 'EARLY' ? '⚡ EARLY' : (tapTiming === 'LATE' ? '🐢 LATE' : '✓ ON TIME');
-            sub.textContent = indicator;
             sub.style.color = tapTiming === 'EARLY' ? 'var(--warn)' : (tapTiming === 'LATE' ? 'var(--danger)' : 'var(--success)');
+            // For Hard (Sabotage), also show how this tap shifted the next player's window
+            if (modeData.variant === 'sabotage' && modeData.turnIndex + 1 < modeData.roundMax) {
+                const shift = modeData.cumulativeTarget - elapsed;
+                const shiftAbs = (Math.abs(shift) / 1000).toFixed(2);
+                const shiftLabel = Math.abs(shift) > 50
+                    ? (shift > 0 ? ` • +${shiftAbs}s on next` : ` • −${shiftAbs}s from next`)
+                    : '';
+                sub.textContent = indicator + shiftLabel;
+            } else {
+                sub.textContent = indicator;
+            }
         }
 
         el(`btn-p${pId}`).classList.remove('active');
@@ -2945,7 +3096,14 @@
             btn.disabled = true;
             btn.classList.add('eliminated');
             el(`stat-p${pId}`).textContent = 'MISFIRE';
-            el(`sub-p${pId}`).textContent = 'Too early!';
+            const penalty = modeData.misfirePenalty || 0;
+            if (penalty === -1) {
+                el(`sub-p${pId}`).textContent = 'LOCKED OUT';
+            } else if (penalty < 0) {
+                el(`sub-p${pId}`).textContent = `${penalty} pts penalty`;
+            } else {
+                el(`sub-p${pId}`).textContent = 'Too early!';
+            }
             snd('bad'); shakeUI(); hap([60]);
             modeData.done += 1;
             if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
@@ -3111,21 +3269,34 @@
             const tierPoints = [1000, 700, 400, 200, 100];
             const rankMap = {};
             ranked.forEach((p, i) => { rankMap[p.id] = tierPoints[i] || 0; });
+            const penalty = modeData.misfirePenalty || 0;
             html = `<div style="margin-bottom:10px;color:var(--text-dim)">Reflex Duel — Tiered Scoring</div><div class="result-grid">`;
             realActivePlayers().forEach(p => {
                 const misfired = !!modeData.misfires[p.id];
                 const hit = modeData.hits[p.id];
-                const pts = misfired || hit == null ? 0 : (rankMap[p.id] || 0);
+                let pts;
+                if (misfired) {
+                    // -1 sentinel = locked out (Hard) → 0 pts; else apply numeric penalty
+                    pts = penalty === -1 ? 0 : penalty;
+                } else {
+                    pts = hit == null ? 0 : (rankMap[p.id] || 0);
+                }
                 p.score += pts;
                 const rank = ranked.findIndex(r => r.id === p.id);
                 let label = misfired ? 'MISFIRE' : (hit == null ? 'NO TAP' : `${hit.toFixed(0)}ms`);
                 const rankLabel = pts > 0 ? (rank === 0 ? '1st' : rank === 1 ? '2nd' : rank === 2 ? '3rd' : `${rank + 1}th`) : '';
+                let noteText;
+                if (misfired) {
+                    noteText = penalty === -1 ? 'Locked out this round' : (penalty < 0 ? `${penalty} pts penalty` : 'Too early!');
+                } else {
+                    noteText = rankLabel ? rankLabel + (rank === 0 ? ' — Fastest!' : '') : '';
+                }
                 html += `
                     <div class="res-card">
                         <div class="res-name" style="color:var(${p.var})">${safe(p.name)}</div>
                         <div class="res-val">${label}</div>
-                        <div class="res-note">${misfired ? 'Too early!' : (rankLabel ? rankLabel + (rank === 0 ? ' — Fastest!' : '') : '')}</div>
-                        <div class="res-pts ${pts === 0 ? 'zero' : ''}">${rankLabel ? rankLabel + ' ' : ''}+${pts}</div>
+                        <div class="res-note">${noteText}</div>
+                        <div class="res-pts ${pts <= 0 ? 'zero' : ''}">${pts >= 0 ? '+' : ''}${pts}</div>
                     </div>`;
             });
             html += `</div>`;
