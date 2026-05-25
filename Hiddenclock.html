@@ -236,18 +236,20 @@
             }
             .arena-timer-zone {
                 position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-                z-index: 60; padding: 20px; pointer-events: none;
-                background: radial-gradient(ellipse, var(--bg) 60%, transparent 100%);
-                border-radius: 50%; width: 280px; height: 200px;
-                /* Reset portrait top-padding in landscape */
-                padding-top: 20px;
+                z-index: 60; padding: 24px 32px; pointer-events: none;
+                background: radial-gradient(ellipse, var(--bg) 70%, transparent 100%);
+                border-radius: var(--radius-lg);
+                width: auto; min-width: 300px; max-width: 520px;
+                height: auto; min-height: 200px; max-height: 80vh;
+                overflow-y: auto; -webkit-overflow-scrolling: touch;
+                padding-top: 24px;
             }
             .arena-timer-zone * { pointer-events: auto; }
             .arena-players-zone {
                 position: absolute; inset: 0;
                 padding: 12px;
-                /* Increase gap to reserve center space for the timer bubble */
-                gap: 220px 300px;
+                /* Reserve center space for the timer zone */
+                gap: 180px 280px;
             }
             .arena-players-zone.players-2 {
                 grid-template-columns: 1fr 1fr; grid-template-rows: 1fr;
@@ -342,15 +344,17 @@
         .score-pts { font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 900; }
 
         .round-progress {
-            width: 100%; max-width: 500px; display: none; justify-content: center; gap: 8px;
+            width: 100%; max-width: 500px; display: none; justify-content: center; gap: 6px;
             margin-bottom: 12px; min-height: 10px;
         }
         .round-pip {
-            width: 12px; height: 12px; border-radius: 999px; border: 1px solid var(--border);
-            background: var(--surface2); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+            width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border);
+            background: var(--surface2); color: var(--text-dim); font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem; font-weight: 900;
+            display: flex; align-items: center; justify-content: center;
             transition: all 0.2s;
         }
-        .round-pip.done { background: var(--p1); border-color: var(--p1); box-shadow: 0 0 12px var(--p1-dim); }
+        .round-pip.done { border-color: var(--p1); background: var(--p1-dim); color: var(--p1); box-shadow: 0 0 15px var(--p1-dim); }
 
         .game-container {
             width: 100%; max-width: 500px;
@@ -482,6 +486,7 @@
             display: none; width: 100%; max-width: 320px; margin: 10px auto 0;
             background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
             padding: 10px; user-select: none; -webkit-user-select: none;
+            overflow: visible; z-index: 70;
         }
         .game-numpad.show { display: block; }
         .numpad-grid {
@@ -861,10 +866,6 @@
                     </div>
                     <div class="config-item"><label>Target Duration (s)</label><input type="number" id="m3-int" value="3" step="0.1" min="0.5" max="10"></div>
                     <div class="config-item"><label>Laps</label><input type="number" id="m3-laps" value="2" min="1" max="10" step="1"></div>
-                    <div class="config-item config-full">
-                        <label>Escalation</label>
-                        <div class="config-toggle"><span>Escalating intervals</span><label class="toggle"><input type="checkbox" id="m3-esc" checked><span class="toggle-track"></span></label></div>
-                    </div>
                 </div>`
         },
         4: {
@@ -1451,7 +1452,7 @@
 
     function renderProgress() {
         const done = Math.min(Math.max(currentRound - 1, 0), totalRounds);
-        el('round-progress').innerHTML = Array.from({ length: totalRounds }, (_, i) => `<div class="round-pip${i < done ? ' done' : ''}"></div>`).join('');
+        el('round-progress').innerHTML = Array.from({ length: totalRounds }, (_, i) => `<div class="round-pip${i < done ? ' done' : ''}">${i + 1}</div>`).join('');
     }
 
     function toggleAdvanced(toggleEl) {
@@ -1765,6 +1766,16 @@
                     // Show numpad targeting the first player's input
                     const firstP = realActivePlayers()[0];
                     if (firstP) numpadShow(el(`guess-input-p${firstP.id}`));
+                    // Auto-lock timeout: prevent infinite hang if a player never locks
+                    modeData.guessTimeout = addTimeout(() => {
+                        realActivePlayers().forEach(p => {
+                            if (!modeData.guesses[p.id]) {
+                                const inp = el(`guess-input-p${p.id}`);
+                                if (inp && !inp.value) inp.value = '0';
+                                lockManualGuess(p.id);
+                            }
+                        });
+                    }, 60000);
                     updateKbHint();
                     return false;
                 }
@@ -1816,6 +1827,12 @@
                     showToast('TAP when the counter matches!', 'var(--success)');
                     renderArena(ids);
                     updateKbHint();
+                    // Auto-end timeout: prevent infinite hang
+                    addTimeout(() => {
+                        if (modeData.lockedCount < realActivePlayers().length) {
+                            addTimeout(endRound, 100);
+                        }
+                    }, 60000);
                     liveDisplay(() => {
                         if (modeData.lockedCount >= realActivePlayers().length) return false;
                         const guessElapsed = performance.now() - modeData.guessStart;
@@ -1828,7 +1845,11 @@
         }
 
         if (currentMode === 2) {
-            modeData.target = (parseFloat(el('m2-tgt').value) || 5) * 1000;
+            // Dynamic round duration: randomize ±30% around configured target
+            const baseTarget = (parseFloat(el('m2-tgt').value) || 5) * 1000;
+            const variance = baseTarget * 0.3;
+            modeData.target = baseTarget + (Math.random() * 2 - 1) * variance;
+            modeData.target = Math.max(1000, modeData.target);
             modeData.hits = {};
             modeData.done = 0;
             setHiddenTimer('??.???');
@@ -1850,9 +1871,12 @@
         }
 
         if (currentMode === 3) {
-            modeData.interval = (parseFloat(el('m3-int').value) || 2) * 1000;
+            // Dynamic round duration: randomize ±25% around configured interval
+            const baseInterval = (parseFloat(el('m3-int').value) || 2) * 1000;
+            const intervalVariance = baseInterval * 0.25;
+            modeData.interval = baseInterval + (Math.random() * 2 - 1) * intervalVariance;
+            modeData.interval = Math.max(500, modeData.interval);
             modeData.laps = clamp(parseInt(el('m3-laps').value, 10) || 2, 1, 10);
-            modeData.escalating = !!el('m3-esc').checked;
             modeData.variant = el('m3-variant')?.value || 'individual';
             modeData.roundMax = realActivePlayers().length * modeData.laps;
             modeData.turnIndex = 0;
@@ -1947,6 +1971,20 @@
                 const gc = el('arena-container');
                 const extraHold = Math.max(0, holdDuration - modeData.minHold);
 
+                // Spontaneous explosion chance: scales from 0% to 30% per second over 4s of extra hold
+                if (modeData.holdUnlocked && extraHold > 0) {
+                    const maxExtraMs = 4000;
+                    const explosionChanceMax = 0.30;
+                    const progress = Math.min(extraHold / maxExtraMs, 1.0);
+                    const explosionRate = explosionChanceMax * progress;
+                    const frameProbability = explosionRate * (16.67 / 1000);
+                    if (Math.random() < frameProbability) {
+                        gc.style.background = '';
+                        bombExplode();
+                        return false;
+                    }
+                }
+
                 // Option 3: Sensory Overload — punish greedy holding past minHold
                 if (extraHold > 0 && modeData.holdUnlocked) {
                     // Full red + continuous max haptics to blind the player
@@ -1999,7 +2037,11 @@
         }
 
         if (currentMode === 5) {
-            modeData.target = (parseFloat(el('m5-tgt').value) || 10) * 1000;
+            // Dynamic round duration: randomize ±25% around configured target
+            const baseTarget = (parseFloat(el('m5-tgt').value) || 10) * 1000;
+            const variance = baseTarget * 0.25;
+            modeData.target = baseTarget + (Math.random() * 2 - 1) * variance;
+            modeData.target = Math.max(2000, modeData.target);
             modeData.hits = {};
             modeData.done = 0;
             setHiddenTimer('??.???');
@@ -2171,7 +2213,14 @@
         modeData.hits[pId] = elapsed;
         const btn = el(`btn-p${pId}`);
         btn.disabled = true; btn.classList.add('done');
-        el(`stat-p${pId}`).textContent = 'LOCKED';
+
+        // Early/Late feedback (safe: only shown on your own button)
+        const diff = elapsed - modeData.target;
+        const timing = diff < -50 ? 'EARLY' : (diff > 50 ? 'LATE' : 'PERFECT');
+        const timingColor = timing === 'EARLY' ? 'var(--warn)' : (timing === 'LATE' ? 'var(--danger)' : 'var(--success)');
+        el(`stat-p${pId}`).textContent = timing;
+        el(`stat-p${pId}`).style.color = timingColor;
+
         modeData.done += 1;
         if (modeData.done >= realActivePlayers().length) addTimeout(endRound, 300);
     }
@@ -2198,7 +2247,20 @@
         const btn = el(`btn-p${pId}`);
         btn.disabled = true; btn.classList.add('done');
         modeData.done += 1;
-        el(`stat-p${pId}`).textContent = 'LOCKED';
+
+        // Early/Late feedback (Cliff: going over = BUST)
+        const diff = elapsed - modeData.target;
+        if (diff > 0) {
+            el(`stat-p${pId}`).textContent = 'BUST!';
+            el(`stat-p${pId}`).style.color = 'var(--danger)';
+            btn.classList.add('bust-flash');
+        } else {
+            const timing = diff < -(modeData.target * 0.1) ? 'EARLY' : 'CLOSE!';
+            const timingColor = timing === 'EARLY' ? 'var(--warn)' : 'var(--success)';
+            el(`stat-p${pId}`).textContent = timing;
+            el(`stat-p${pId}`).style.color = timingColor;
+        }
+
         if (modeData.done >= realActivePlayers().length) {
             const hasBust = realActivePlayers().some(p => modeData.hits[p.id] > modeData.target);
             if (hasBust) {
@@ -2249,7 +2311,7 @@
         if (modeData.variant === 'sabotage') {
             return modeData.interval;
         }
-        return modeData.escalating ? modeData.interval * (turnIndex + 1) : modeData.interval;
+        return modeData.interval;
     }
 
     function relaySetTurn() {
@@ -2330,7 +2392,7 @@
         const sub = el(`sub-p${pId}`);
         stat.textContent = `${modeData.scores[pId]} pts`;
 
-        if (modeData.variant === 'sabotage' && sub) {
+        if (sub) {
             const indicator = tapTiming === 'EARLY' ? '⚡ EARLY' : (tapTiming === 'LATE' ? '🐢 LATE' : '✓ ON TIME');
             sub.textContent = indicator;
             sub.style.color = tapTiming === 'EARLY' ? 'var(--warn)' : (tapTiming === 'LATE' ? 'var(--danger)' : 'var(--success)');
@@ -2447,12 +2509,13 @@
         const btn = el(`btn-p${loserId}`);
         if (btn) btn.classList.add('eliminated');
 
-        // Balanced scoring:
-        // - Survivors share a pool proportional to their passes (contribution-based)
-        // - Risk bonus uses diminishing returns (sqrt scaling) to prevent greed exploits
-        // - Minimum participation bonus for survivors who touched the bomb at least once
+        // Participation-weighted scoring with fairness rework:
+        // - Players who handle the bomb get rewarded proportionally
+        // - "Never touched" players get minimal points
+        // - Risk bonus with diminishing returns (sqrt) and hard cap
+        // - Loser gets small consolation for passes made
         const survivors = realActivePlayers().filter(p => p.id !== loserId);
-        const totalPasses = survivors.reduce((sum, p) => sum + (modeData.passCounts[p.id] || 0), 0);
+        const totalPasses = realActivePlayers().reduce((sum, p) => sum + (modeData.passCounts[p.id] || 0), 0);
 
         let html = `<div style="color:var(--danger);font-size:1.2rem;font-weight:900;margin-bottom:10px;">${safe(loser.name)} exploded!</div><div class="result-grid">`;
         realActivePlayers().forEach(p => {
@@ -2463,19 +2526,26 @@
             let pts = 0;
             let riskPts = 0;
             if (survived) {
-                // Base survival: 80 pts
-                pts = 80;
-                // Contribution bonus: share 120 pts proportionally among survivors by passes
+                // Base survival: 50 pts
+                pts = 50;
+                // Active participation bonus: 150 pts shared by pass ratio
                 if (totalPasses > 0 && passes > 0) {
-                    pts += Math.round(120 * (passes / totalPasses));
+                    pts += Math.round(150 * (passes / totalPasses));
                 }
-                // Risk bonus: diminishing returns via sqrt scaling
-                // sqrt(seconds) * 40 — rewards risk but caps exponential gain
+                // "Never touched" penalty: players with 0 passes get reduced base
+                if (passes === 0) {
+                    pts = 20;
+                }
+                // Risk bonus: diminishing returns via sqrt scaling (capped)
                 if (modeData.riskBonus && riskMs > 500) {
                     const riskSeconds = riskMs / 1000;
-                    riskPts = Math.round(40 * Math.sqrt(riskSeconds));
+                    riskPts = Math.round(35 * Math.sqrt(riskSeconds));
+                    riskPts = Math.min(riskPts, 120);
                 }
                 pts += riskPts;
+            } else {
+                // Loser consolation for passes made before explosion
+                pts = Math.min(passes * 5, 30);
             }
 
             p.score += pts;
@@ -2676,7 +2746,7 @@
             display.className = 'stopwatch-display';
             display.textContent = 'DONE';
             const variantLabel = modeData.variant === 'sabotage' ? 'Master Sabotage' : 'Individual Laps';
-            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Relay complete — ${variantLabel} — ${modeData.laps} lap${modeData.laps === 1 ? '' : 's'}${modeData.escalating ? ', escalating on' : ', escalation off'}.</div><div class="result-grid">`;
+            html = `<div style="margin-bottom:10px;color:var(--text-dim)">Relay complete — ${variantLabel} — ${modeData.laps} lap${modeData.laps === 1 ? '' : 's'}.</div><div class="result-grid">`;
             realActivePlayers().forEach(p => {
                 const pts = modeData.scores[p.id] || 0;
                 p.score += pts;
@@ -2688,7 +2758,10 @@
                         return `${icon} ${fmt(t.diff)}s off`;
                     }).join(', ');
                 } else {
-                    turnDetails = playerTurns.map(t => `${fmt(t.diff)}s off`).join(', ');
+                    turnDetails = playerTurns.map(t => {
+                        const icon = t.tapTiming === 'EARLY' ? '⚡' : (t.tapTiming === 'LATE' ? '🐢' : '✓');
+                        return `${icon} ${fmt(t.diff)}s off`;
+                    }).join(', ');
                 }
                 html += `
                     <div class="res-card">
